@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ThinkFlow Design Master - Color Sync & Esc</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.1.9/leader-line.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        .canvas-bg { background-color: #ffffff; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; position: relative; width: 100%; height: 850px; overflow: hidden; }
+        .node { position: absolute; cursor: grab; user-select: none; z-index: 20; min-width: 100px; }
+        .node:active { cursor: grabbing; }
+        .node.selected { outline: 4px solid #6366f1; outline-offset: 2px; }
+        .node-box { padding: 12px; border-radius: 12px; border: 2px solid; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); background: white; }
+        /* カテゴリー色定義 */
+        .cat-assets { border-color: #3b82f6; color: #1e40af; background-color: #eff6ff; --cat-color: #3b82f6; }
+        .cat-reality { border-color: #94a3b8; color: #1e293b; background-color: #f8fafc; --cat-color: #94a3b8; }
+        .cat-emotion { border-color: #ec4899; color: #9d174d; background-color: #fdf2f8; --cat-color: #ec4899; }
+        .cat-projected { border-color: #f59e0b; color: #92400e; background-color: #fffbeb; --cat-color: #f59e0b; }
+        .cat-mechanism { border-color: #6366f1; color: #3730a3; background-color: #eef2ff; --cat-color: #6366f1; }
+        .cat-ideal { border-color: #10b981; color: #065f46; background-color: #f0fdf4; --cat-color: #10b981; }
+        
+        .node-text-only { border: none; background: transparent; box-shadow: none; font-weight: 900; font-size: 1.8rem; color: #1e293b; white-space: nowrap; --cat-color: #1e293b; }
+        .line-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .drawn-line { pointer-events: auto; cursor: pointer; stroke: #6366f1; stroke-width: 3; fill: none; transition: stroke 0.2s; }
+        .drawn-line:hover { stroke: #fb7185; stroke-width: 5; }
+        .temp-line { stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 5; fill: none; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans overflow-hidden">
+    <div class="p-4 mx-auto max-w-[1600px]">
+        <header class="flex justify-between items-center mb-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <div class="flex items-center gap-4">
+                <h1 class="text-xl font-black italic tracking-tighter uppercase">ThinkFlow <span class="text-indigo-600 font-bold">Pro Master</span></h1>
+                <span id="saveLabel" class="text-[9px] text-emerald-500 font-bold uppercase opacity-0 transition-opacity tracking-widest">Auto Saved!</span>
+            </div>
+            <div class="flex gap-2 text-[10px] font-bold">
+                <button onclick="undo()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl hover:bg-slate-300">Undo (Ctrl+Z)</button>
+                <button onclick="exportPDF()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-500 transition">PDF出力</button>
+                <button onclick="downloadData()" class="bg-slate-800 text-white px-4 py-2 rounded-xl">保存</button>
+                <button onclick="importData()" class="bg-slate-500 text-white px-4 py-2 rounded-xl">読込</button>
+                <button onclick="clearAll()" class="bg-red-50 text-red-500 px-4 py-2 rounded-xl hover:bg-red-100">リセット</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-3 bg-white p-6 rounded-2xl shadow-xl border border-slate-200 h-fit space-y-6 z-30">
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setMode('box')" id="modeBox" class="p-2 text-[10px] font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700">枠あり要素</button>
+                    <button onclick="setMode('text')" id="modeText" class="p-2 text-[10px] font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400">枠なしタイトル</button>
+                </div>
+                <div id="categorySection">
+                    <label class="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest font-black">カテゴリー</label>
+                    <select id="catSelect" class="w-full border-2 border-slate-50 p-2.5 rounded-xl text-xs font-bold bg-slate-50 outline-none">
+                        <option value="資産・実績">資産・実績 (Assets)</option>
+                        <option value="現実・制約">現実・制約 (Reality)</option>
+                        <option value="感情・動機">感情・動機 (Internal)</option>
+                        <option value="想定推移">想定推移 (Projected)</option>
+                        <option value="仕組み・手段">仕組み・手段 (Mechanism)</option>
+                        <option value="理想・目的">理想・目的 (Ideal)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest font-black">内容</label>
+                    <textarea id="nodeInput" placeholder="入力してください..." class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm h-32 focus:border-indigo-200 outline-none"></textarea>
+                </div>
+                <button onclick="createNode()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition shadow-lg">画面に追加</button>
+                <div class="bg-indigo-50 p-4 rounded-xl text-[9px] text-indigo-800 font-bold space-y-1">
+                    <p>・2要素クリック：矢印接続</p>
+                    <p>・Escキー：選択を解除</p>
+                    <p>・Ctrl+Z：元に戻す</p>
+                    <p>・背景ドラッグ：直線を引く</p>
+                </div>
+            </div>
+
+            <div id="captureArea" class="lg:col-span-9 bg-white rounded-3xl shadow-2xl border border-slate-200 canvas-bg" onmousedown="startDrawing(event)">
+                <svg id="svgArea" class="line-svg"></svg>
+                <div id="canvasInner" class="w-full h-full relative pointer-events-none"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'box', isDrawing = false, startX, startY, tempLine = null;
+        let nodes = [], connections = [], selectedNodeId = null;
+        let undoStack = [];
+        const svgArea = document.getElementById('svgArea');
+
+        window.onload = loadFromLocal;
+        
+        // キーボード操作設定
+        window.onkeydown = (e) => {
+            // Undo: Ctrl+Z
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault(); undo();
+            }
+            // 選択解除: Esc
+            if (e.key === 'Escape') {
+                if (selectedNodeId) {
+                    document.getElementById(selectedNodeId).classList.remove('selected');
+                    selectedNodeId = null;
+                }
+            }
+        };
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('modeBox').className = mode === 'box' ? 'p-2 text-[10px] font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'p-2 text-[10px] font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
+            document.getElementById('modeText').className = mode === 'text' ? 'p-2 text-[10px] font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'p-2 text-[10px] font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
+            document.getElementById('categorySection').style.display = mode === 'box' ? 'block' : 'none';
+        }
+
+        function createNode(data = null, isUndo = false) {
+            const input = data ? { value: data.text } : document.getElementById('nodeInput');
+            if (!input.value.trim()) return;
+            if (!isUndo && !data) pushUndo();
+
+            const nodeEl = document.createElement('div');
+            const id = data ? data.id : "node_" + Date.now();
+            nodeEl.id = id;
+            nodeEl.className = 'node pointer-events-auto';
+            const type = data ? data.type : currentMode;
+            
+            if (type === 'text') {
+                nodeEl.classList.add('node-text-only');
+                nodeEl.innerHTML = input.value.replace(/\n/g, '<br>');
+            } else {
+                nodeEl.classList.add('node-box');
+                const cat = data ? data.cat : document.getElementById('catSelect').value;
+                nodeEl.classList.add(getCatClass(cat));
+                nodeEl.setAttribute('data-cat', cat);
+                nodeEl.innerHTML = `<div class="text-[8px] opacity-50 uppercase font-black tracking-tighter mb-1">${cat}</div><div class="text-sm font-bold leading-snug">${input.value.replace(/\n/g, '<br>')}</div>`;
+            }
+            nodeEl.setAttribute('data-type', type);
+            nodeEl.style.left = data ? data.left : "60px";
+            nodeEl.style.top = data ? data.top : "60px";
+
+            nodeEl.onmousedown = (e) => {
+                e.stopPropagation();
+                pushUndo();
+                const rect = document.getElementById('captureArea').getBoundingClientRect();
+                let sx = e.clientX - nodeEl.getBoundingClientRect().left;
+                let sy = e.clientY - nodeEl.getBoundingClientRect().top;
+                document.onmousemove = (me) => {
+                    nodeEl.style.left = (me.clientX - rect.left - sx) + 'px';
+                    nodeEl.style.top = (me.clientY - rect.top - sy) + 'px';
+                    nodes.find(n => n.id === id).lines.forEach(l => l.position());
+                };
+                document.onmouseup = () => { document.onmousemove = null; saveToLocal(); };
+            };
+            
+            nodeEl.onclick = (e) => {
+                e.stopPropagation();
+                if (!selectedNodeId) {
+                    selectedNodeId = id; nodeEl.classList.add('selected');
+                } else if (selectedNodeId === id) {
+                    selectedNodeId = null; nodeEl.classList.remove('selected');
+                } else {
+                    pushUndo();
+                    drawLeaderLine(selectedNodeId, id);
+                    document.getElementById(selectedNodeId).classList.remove('selected');
+                    selectedNodeId = null;
+                }
+            };
+            nodeEl.oncontextmenu = (e) => { e.preventDefault(); pushUndo(); deleteNode(id); };
+            document.getElementById('canvasInner').appendChild(nodeEl);
+            nodes.push({ id, el: nodeEl, lines: [] });
+            if (!data) { input.value = ''; saveToLocal(); }
+        }
+
+        function getCatClass(cat) {
+            const map = {'資産・実績': 'cat-assets', '現実・制約': 'cat-reality', '感情・動機': 'cat-emotion', '想定推移': 'cat-projected', '仕組み・手段': 'cat-mechanism', '理想・目的': 'cat-ideal'};
+            return map[cat] || 'cat-ideal';
+        }
+
+        function drawLeaderLine(startId, endId) {
+            const startEl = document.getElementById(startId);
+            // 起点要素のCSS変数から色を取得
+            const lineColor = getComputedStyle(startEl).getPropertyValue('--cat-color').trim() || '#818cf8';
+            
+            const line = new LeaderLine(startEl, document.getElementById(endId), { 
+                color: lineColor, 
+                size: 3, 
+                endPlug: 'arrow' 
+            });
+
+            const removeLineAction = () => { 
+                pushUndo(); line.remove(); 
+                connections = connections.filter(c => c.line !== line); 
+                nodes.forEach(n => n.lines = n.lines.filter(l => l !== line)); 
+                saveToLocal(); 
+            };
+
+            const lineSelector = '.leader-line:last-child';
+            const lineEl = document.querySelector(lineSelector);
+            lineEl.style.cursor = 'pointer';
+            lineEl.ondblclick = removeLineAction;
+
+            nodes.find(n => n.id === startId).lines.push(line);
+            nodes.find(n => n.id === endId).lines.push(line);
+            connections.push({ line, startId, endId, color: lineColor });
+            saveToLocal();
+        }
+
+        function startDrawing(e) {
+            if (e.target !== document.getElementById('captureArea') && e.target !== svgArea) return;
+            isDrawing = true; pushUndo();
+            const rect = document.getElementById('captureArea').getBoundingClientRect();
+            startX = e.clientX - rect.left; startY = e.clientY - rect.top;
+            tempLine = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+            tempLine.setAttribute("class", "temp-line");
+            svgArea.appendChild(tempLine);
+            document.onmousemove = (me) => {
+                let cx = me.clientX - rect.left, cy = me.clientY - rect.top;
+                let pts = Math.abs(cx - startX) > Math.abs(cy - startY) ? `${startX},${startY} ${cx},${startY}` : `${startX},${startY} ${startX},${cy}`;
+                tempLine.setAttribute("points", pts);
+            };
+            document.onmouseup = () => {
+                isDrawing = false; document.onmousemove = null;
+                const p = tempLine.getAttribute("points");
+                if (p) {
+                    const l = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+                    l.setAttribute("class", "drawn-line"); l.setAttribute("points", p);
+                    l.onclick = (ev) => { ev.stopPropagation(); pushUndo(); l.remove(); saveToLocal(); };
+                    svgArea.appendChild(l);
+                }
+                tempLine.remove(); saveToLocal();
+            };
+        }
+
+        function pushUndo() {
+            const current = JSON.stringify(getCurrentState());
+            if (undoStack.length === 0 || undoStack[undoStack.length - 1] !== current) {
+                undoStack.push(current);
+                if (undoStack.length > 30) undoStack.shift();
+            }
+        }
+
+        function undo() {
+            if (undoStack.length === 0) return;
+            const previous = JSON.parse(undoStack.pop());
+            clearCanvasOnly();
+            applyState(previous);
+            saveToLocal();
+        }
+
+        function getCurrentState() {
+            const nData = nodes.map(n => ({ id: n.id, type: n.el.getAttribute('data-type'), cat: n.el.getAttribute('data-cat'), text: n.el.innerText.split('\n').pop(), left: n.el.style.left, top: n.el.style.top }));
+            const lData = connections.map(c => ({ startId: c.startId, endId: c.endId }));
+            const fData = Array.from(document.querySelectorAll('.drawn-line')).map(el => el.getAttribute('points'));
+            return { nodes: nData, leaderLines: lData, freeLines: fData };
+        }
+
+        function applyState(state) {
+            state.nodes.forEach(n => createNode(n, true));
+            state.leaderLines.forEach(l => drawLeaderLine(l.startId, l.endId));
+            state.freeLines.forEach(p => {
+                const l = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+                l.setAttribute("class", "drawn-line"); l.setAttribute("points", p);
+                l.onclick = (ev) => { ev.stopPropagation(); pushUndo(); l.remove(); saveToLocal(); };
+                svgArea.appendChild(l);
+            });
+        }
+
+        function clearCanvasOnly() {
+            connections.forEach(c => c.line.remove());
+            connections = [];
+            nodes.forEach(n => n.el.remove());
+            nodes = [];
+            Array.from(document.querySelectorAll('.drawn-line')).forEach(l => l.remove());
+        }
+
+        function saveToLocal() { localStorage.setItem('thinkflow_final_state_pro', JSON.stringify(getCurrentState())); const s = document.getElementById('saveLabel'); s.style.opacity = 1; setTimeout(() => s.style.opacity = 0, 1000); }
+        function loadFromLocal() { const data = JSON.parse(localStorage.getItem('thinkflow_final_state_pro')); if (data) applyState(data); }
+        function deleteNode(id) { const node = nodes.find(n => n.id === id); node.lines.forEach(l => { l.remove(); connections = connections.filter(c => c.line !== l); }); node.el.remove(); nodes = nodes.filter(n => n.id !== id); saveToLocal(); }
+        function clearAll() { if(confirm("全消去しますか？")) { localStorage.clear(); location.reload(); } }
+        function downloadData() { const b = new Blob([localStorage.getItem('thinkflow_final_state_pro')], {type:'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'thinkflow_data.txt'; a.click(); }
+        function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = (e) => { const r = new FileReader(); r.onload = (re) => { localStorage.setItem('thinkflow_final_state_pro', re.target.result); location.reload(); }; r.readAsText(e.target.files[0]); }; i.click(); }
+        async function exportPDF() { const c = await html2canvas(document.getElementById('captureArea'), { scale: 2 }); const pdf = new jspdf.jsPDF('l', 'mm', 'a4'); pdf.addImage(c.toDataURL('image/png'), 'PNG', 0, 0, 297, (c.height * 297) / c.width); pdf.save("thinkflow_report.pdf"); }
+    </script>
+</body>
+</html>
