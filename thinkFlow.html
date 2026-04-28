@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThinkFlow Visual - with Legend</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+    <style>
+        .category-column { min-height: 100px; }
+        .node-card:hover .delete-btn { opacity: 1; }
+        .delete-btn { opacity: 0; transition: opacity 0.2s; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-20 text-slate-900 font-sans">
+    <div class="max-w-7xl mx-auto p-4 md:p-6">
+        <header class="mb-6 border-b pb-4 flex justify-between items-end">
+            <div>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tighter italic">ThinkFlow <span class="text-indigo-600">Visual</span></h1>
+                <p class="text-slate-500 text-xs">キャリアの「現在地」と「理想」の繋がりを解明する</p>
+            </div>
+            <button onclick="resetFlow()" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded hover:bg-red-200 transition">全データ削除</button>
+        </header>
+
+        <!-- 操作エリア -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+            <!-- 1. 要素追加 -->
+            <div class="lg:col-span-4 bg-white p-5 rounded-xl shadow-md border border-slate-200">
+                <label class="block text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-widest">1. 要素を追加</label>
+                <div class="space-y-3">
+                    <select id="catSelect" class="w-full border border-slate-200 p-2 rounded text-sm bg-slate-50">
+                        <option value="資産・実績">1. 資産・実績 (Past)</option>
+                        <option value="現実・制約">2. 現実・制約 (Current)</option>
+                        <option value="感情・動機">3. 感情・動機 (Internal)</option>
+                        <option value="想定推移">4. 想定推移 (Future/Proj)</option>
+                        <option value="理想・目的">5. 理想・目的 (Future/Ideal)</option>
+                    </select>
+                    <div class="flex gap-2">
+                        <input id="nodeInput" type="text" placeholder="キーワードを入力" class="flex-1 border border-slate-200 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-100" onkeypress="if(event.key==='Enter') addNode()">
+                        <button onclick="addNode()" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-700 transition">登録</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 2. 接続設定 -->
+            <div class="lg:col-span-8 bg-white p-5 rounded-xl shadow-md border border-slate-200">
+                <label class="block text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-widest">2. 要素を繋ぐ</label>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div class="space-y-1">
+                        <p class="text-[9px] text-slate-400 font-bold uppercase">From (起点)</p>
+                        <select id="fromCatFilter" onchange="filterNodes('from')" class="w-full border p-1 text-[10px] rounded bg-slate-50 border-blue-200"><option value="">カテゴリーを選択</option><option value="資産・実績">資産・実績</option><option value="現実・制約">現実・制約</option><option value="感情・動機">感情・動機</option><option value="想定推移">想定推移</option><option value="理想・目的">理想・目的</option></select>
+                        <select id="fromSelect" class="w-full border p-2 rounded text-xs bg-white" disabled><option value="">キーワードを選択</option></select>
+                    </div>
+                    <div class="space-y-1">
+                        <p class="text-[9px] text-slate-400 font-bold uppercase">Line Type (意味合い)</p>
+                        <select id="edgeType" class="w-full border p-2 rounded text-xs bg-indigo-50 font-bold text-indigo-700 border-indigo-200">
+                            <option value="-->">スタンダード (──>)</option>
+                            <option value="==>">重要・理想へ (━━>)</option>
+                            <option value="-.->">懸念・点線 ( - - >)</option>
+                            <option value="--x">遮断・不可 (──x)</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <p class="text-[9px] text-slate-400 font-bold uppercase">To (終点)</p>
+                        <select id="toCatFilter" onchange="filterNodes('to')" class="w-full border p-1 text-[10px] rounded bg-slate-50 border-emerald-200"><option value="">カテゴリーを選択</option><option value="資産・実績">資産・実績</option><option value="現実・制約">現実・制約</option><option value="感情・動機">感情・動機</option><option value="想定推移">想定推移</option><option value="理想・目的">理想・目的</option></select>
+                        <select id="toSelect" class="w-full border p-2 rounded text-xs bg-white" disabled><option value="">キーワードを選択</option></select>
+                    </div>
+                </div>
+                <button onclick="connectNodes()" class="w-full bg-indigo-600 text-white py-2.5 rounded shadow-lg hover:bg-indigo-500 transition font-bold text-sm">フローを接続</button>
+            </div>
+        </div>
+
+        <!-- ストック表示 -->
+        <div class="grid grid-cols-5 gap-2 mb-8">
+            <div class="bg-blue-50/20 p-2 rounded border border-blue-100"><h3 class="text-[8px] font-bold text-blue-400 mb-2 uppercase text-center">Assets</h3><div id="nodes-assets" class="space-y-1"></div></div>
+            <div class="bg-red-50/20 p-2 rounded border border-red-100"><h3 class="text-[8px] font-bold text-red-400 mb-2 uppercase text-center">Reality</h3><div id="nodes-reality" class="space-y-1"></div></div>
+            <div class="bg-pink-50/20 p-2 rounded border border-pink-100"><h3 class="text-[8px] font-bold text-pink-400 mb-2 uppercase text-center">Drivers</h3><div id="nodes-emotion" class="space-y-1"></div></div>
+            <div class="bg-amber-50/20 p-2 rounded border border-amber-100"><h3 class="text-[8px] font-bold text-amber-400 mb-2 uppercase text-center">Projected</h3><div id="nodes-projected" class="space-y-1"></div></div>
+            <div class="bg-emerald-50/20 p-2 rounded border border-emerald-100"><h3 class="text-[8px] font-bold text-emerald-400 mb-2 uppercase text-center">Ideal</h3><div id="nodes-ideal" class="space-y-1"></div></div>
+        </div>
+
+        <!-- 凡例エリア -->
+        <div class="flex flex-wrap justify-center gap-6 mb-4 px-4 py-2 bg-slate-100/50 rounded-full border border-slate-200 max-w-fit mx-auto">
+            <div class="flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                <span class="text-indigo-400">─────▶</span> スタンダード
+            </div>
+            <div class="flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                <span class="text-indigo-600 font-black">━━━━━▶</span> 重要・理想
+            </div>
+            <div class="flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                <span class="text-indigo-400">─ ─ ─ ▶</span> 懸念・不安
+            </div>
+            <div class="flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                <span class="text-indigo-400">─────✖</span> 遮断・困難
+            </div>
+        </div>
+
+        <!-- ビジュアライザー -->
+        <div class="bg-white p-6 md:p-10 rounded-3xl shadow-2xl border border-slate-200">
+            <div id="mermaidDiagram" class="mermaid flex justify-center overflow-x-auto"></div>
+        </div>
+
+        <!-- 接続履歴 -->
+        <div class="mt-8 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <h4 class="text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-widest">Active Connections</h4>
+            <div id="connectionList" class="flex flex-wrap gap-2"></div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'base', themeVariables: { primaryTextColor: '#1e293b', edgeColor: '#6366f1', lineColor: '#6366f1', fontSize: '12px' } });
+
+        let state = JSON.parse(localStorage.getItem('thinkflow_v3')) || { nodes: [], edges: [] };
+
+        function save() {
+            localStorage.setItem('thinkflow_v3', JSON.stringify(state));
+            updateUI();
+            renderDiagram();
+        }
+
+        function addNode() {
+            const input = document.getElementById('nodeInput');
+            const cat = document.getElementById('catSelect').value;
+            const text = input.value.trim();
+            if (text) {
+                state.nodes.push({ id: "N" + Date.now(), text, category: cat });
+                input.value = '';
+                save();
+            }
+        }
+
+        function deleteNode(id) {
+            state.nodes = state.nodes.filter(n => n.id !== id);
+            state.edges = state.edges.filter(e => e.from !== id && e.to !== id);
+            save();
+        }
+
+        function filterNodes(type) {
+            const cat = document.getElementById(type + 'CatFilter').value;
+            const select = document.getElementById(type + 'Select');
+            select.innerHTML = '<option value="">要素を選択</option>';
+            if (!cat) { select.disabled = true; return; }
+            state.nodes.filter(n => n.category === cat).forEach(n => {
+                select.innerHTML += `<option value="${n.id}">${n.text}</option>`;
+            });
+            select.disabled = false;
+        }
+
+        function connectNodes() {
+            const fromId = document.getElementById('fromSelect').value;
+            const toId = document.getElementById('toSelect').value;
+            const type = document.getElementById('edgeType').value;
+            if (fromId && toId && fromId !== toId) {
+                state.edges.push({ from: fromId, to: toId, type: type });
+                save();
+            }
+        }
+
+        function deleteEdge(index) { state.edges.splice(index, 1); save(); }
+
+        function updateUI() {
+            const cats = { '資産・実績': 'nodes-assets', '現実・制約': 'nodes-reality', '感情・動機': 'nodes-emotion', '想定推移': 'nodes-projected', '理想・目的': 'nodes-ideal' };
+            Object.values(cats).forEach(id => document.getElementById(id).innerHTML = '');
+
+            state.nodes.forEach(n => {
+                const card = document.createElement('div');
+                card.className = "node-card bg-white p-1.5 text-[9px] shadow-sm rounded border border-slate-100 flex justify-between items-center group";
+                card.innerHTML = `<span class="truncate">${n.text}</span><button onclick="deleteNode('${n.id}')" class="delete-btn text-red-300 ml-1">✕</button>`;
+                document.getElementById(cats[n.category]).appendChild(card);
+            });
+
+            const connList = document.getElementById('connectionList');
+            connList.innerHTML = state.edges.map((e, i) => {
+                const f = state.nodes.find(n => n.id === e.from)?.text || '?';
+                const t = state.nodes.find(n => n.id === e.to)?.text || '?';
+                return `<div class="bg-slate-50 px-2 py-1 rounded border border-slate-100 text-[9px] flex items-center gap-2"><span>${f} → ${t}</span><button onclick="deleteEdge(${i})" class="text-red-400 font-bold">✕</button></div>`;
+            }).join('');
+            filterNodes('from'); filterNodes('to');
+        }
+
+        async function renderDiagram() {
+            const element = document.getElementById('mermaidDiagram');
+            if (state.edges.length === 0) {
+                element.innerHTML = '<div class="text-slate-300 py-20 text-center text-sm italic italic">カテゴリーを選び、要素を繋ぐとフローが生成されます</div>';
+                return;
+            }
+
+            const activeNodeIds = new Set();
+            state.edges.forEach(e => { activeNodeIds.add(e.from); activeNodeIds.add(e.to); });
+
+            let def = "graph LR\n";
+            // スタイル定義
+            def += "  classDef asset fill:#eff6ff,stroke:#3b82f6,color:#1e40af,stroke-width:1px;\n";
+            def += "  classDef reality fill:#fef2f2,stroke:#ef4444,color:#991b1b,stroke-width:1px;\n";
+            def += "  classDef emotion fill:#fdf2f8,stroke:#ec4899,color:#9d174d,stroke-width:1px;\n";
+            def += "  classDef projected fill:#fffbeb,stroke:#f59e0b,color:#92400e,stroke-width:1px;\n";
+            def += "  classDef ideal fill:#f0fdf4,stroke:#10b981,color:#065f46,stroke-width:3px;\n";
+
+            // ノード配置
+            state.nodes.forEach(n => {
+                if (activeNodeIds.has(n.id)) {
+                    let label = n.text;
+                    if(n.category === '理想・目的') label = label;
+                    if(n.category === '現実・制約') label = label;
+                    const cls = n.category === '資産・実績' ? 'asset' : n.category === '現実・制約' ? 'reality' : n.category === '感情・動機' ? 'emotion' : n.category === '想定推移' ? 'projected' : 'ideal';
+                    def += `  ${n.id}["${label}"]:::${cls}\n`;
+                }
+            });
+
+            // エッジ追加
+            state.edges.forEach(e => {
+                def += `  ${e.from} ${e.type} ${e.to}\n`;
+            });
+
+            element.removeAttribute('data-processed');
+            element.innerHTML = def;
+            await mermaid.run({ nodes: [element] });
+        }
+
+        function resetFlow() { if(confirm("全データを消去しますか？")) { state = { nodes: [], edges: [] }; save(); } }
+        updateUI(); renderDiagram();
+    </script>
+</body>
+</html>
