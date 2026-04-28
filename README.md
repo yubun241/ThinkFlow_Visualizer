@@ -2,8 +2,11 @@
 ThinkFlow Visual は、散らばった思考やキャリアの構成要素を、直感的な操作で「構造化グラフ」に変換するビジネス思考支援ツールです。 単なるメモ書きでは見えてこない、「現状の制約（Reality）」と「理想（Ideal）」の間のギャップや、それを繋ぐ「動機（Drivers）」の論理性を視覚的に解明します。
 
 ## 概要
-
+Ver.1
 <img width="1259" height="868" alt="image" src="https://github.com/user-attachments/assets/b95bbb3b-f828-4cb4-aff5-0f9f4a5ccd71" />
+
+Ver.3
+<img width="1556" height="527" alt="image" src="https://github.com/user-attachments/assets/89c8898a-a721-4cd6-9da0-59ad6ab53921" />
 
 ## ビジネスシーンにおける活用シーン
 ThinkFlow Visual は、散らばった思考やキャリアの構成要素を、直感的な操作で「構造化グラフ」に変換するビジネス思考支援ツールです。
