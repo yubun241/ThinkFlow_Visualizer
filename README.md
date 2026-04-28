@@ -12,7 +12,7 @@ ThinkFlow Visual は、散らばった思考やキャリアの構成要素を、
 
 【ビジネスにおける3つの活用シーン】
 
-戦略的キャリア設計（Career Strategy）
+◯ 戦略的キャリア設計（Career Strategy）
 
 自分のこれまでの実績（Assets）が、どのように将来の理想（Ideal）に結びついているかを可視化します。
 
@@ -21,7 +21,7 @@ ThinkFlow Visual は、散らばった思考やキャリアの構成要素を、
 
 
 
-意思決定のロジック構築（Decision Making）
+◯ 意思決定のロジック構築（Decision Making）
 
 プロジェクトの推進において、感情的な動機（Internal）と客観的な予測（Projected）を分けて整理できます。
 
@@ -30,7 +30,7 @@ ThinkFlow Visual は、散らばった思考やキャリアの構成要素を、
 
 
 
-自己分析・1on1の準備（Self-Analysis）
+◯ 自己分析・1on1の準備（Self-Analysis）
 
 上司やメンターとの面談前に、自分の思考プロセスを整理して図解しておくことで、説得力の高い説明が可能になります。
 
