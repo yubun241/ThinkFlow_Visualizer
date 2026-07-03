@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ThinkFlow Pro - Image Resizing</title>
+    <title>ThinkFlow Pro - Edit Fixed</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.1.9/leader-line.min.js"></script>
     <style>
@@ -17,34 +17,30 @@
         }
         #viewport { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; pointer-events: none; }
         
-        /* Node Styles */
         .node { position: absolute; cursor: grab; user-select: none; z-index: 20; min-width: 50px; pointer-events: auto; }
         .node.selected { outline: 4px solid #6366f1; outline-offset: 4px; z-index: 50; }
         .node-box { padding: 14px; border-radius: 12px; border: 2px solid; background: white; width: 100%; height: 100%; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
         .node-text-only { border: none; background: transparent; font-weight: 900; font-size: 1.8rem; color: #1e293b; white-space: nowrap; }
         
-        /* Image Node Specific */
         .node-image { padding: 4px; background: white; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); display: flex; }
         .node-image img { border-radius: 8px; width: 100%; height: 100%; display: block; pointer-events: none; object-fit: contain; }
 
-        /* Resizer Handle */
         .resizer { width: 16px; height: 16px; background: #6366f1; position: absolute; right: 0; bottom: 0; cursor: se-resize; border-radius: 4px 0 10px 0; opacity: 0; z-index: 30; }
         .node:hover .resizer { opacity: 1; }
 
-        /* Categories */
+        /* カテゴリーカラー設定 */
         .cat-assets { border-color: #3b82f6; color: #1e40af; background-color: #eff6ff; }
         .cat-reality { border-color: #94a3b8; color: #1e293b; background-color: #f8fafc; }
         .cat-emotion { border-color: #ec4899; color: #9d174d; background-color: #fdf2f8; }
         .cat-projected { border-color: #f59e0b; color: #92400e; background-color: #fffbeb; }
         .cat-mechanism { border-color: #6366f1; color: #3730a3; background-color: #eef2ff; }
         .cat-ideal { border-color: #10b981; color: #065f46; background-color: #f0fdf4; }
+        .cat-owner { border-color: #14b8a6; color: #134e4a; background-color: #f0fdfa; }
 
-        /* SVGs */
         #svgLayer { position: absolute; top: 0; left: 0; width: 10000px; height: 10000px; overflow: visible; }
         .drawn-line { stroke: #000; stroke-width: 3; fill: none; }
         .temp-line { stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 5; fill: none; }
 
-        /* Tools */
         .mode-move { cursor: grab !important; }
         .mode-pen { cursor: crosshair !important; }
         .mode-eraser { cursor: cell !important; }
@@ -78,18 +74,29 @@
                 <button onclick="setNodeDisplayMode('box')" id="modeBox" class="p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700">枠あり</button>
                 <button onclick="setNodeDisplayMode('text')" id="modeText" class="p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400">枠なし</button>
             </div>
-            <select id="catSelect" class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm font-bold bg-slate-50 outline-none">
-                <option value="資産・実績">資産・実績</option><option value="現実・制約">現実・制約</option>
-                <option value="感情・動機">感情・動機</option><option value="想定推移">想定推移</option>
-                <option value="仕組み・手段">仕組み・手段</option><option value="理想・目的">理想・目的</option>
-            </select>
-            <textarea id="nodeInput" placeholder="思考を入力..." class="w-full border-2 border-slate-50 p-4 rounded-xl text-sm h-32 outline-none font-bold"></textarea>
-            <button onclick="handleMainBtnClick()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black italic uppercase shadow-md active:scale-95 transition">要素を追加</button>
+            
+            <div id="categorySection" class="space-y-4">
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">カテゴリー</label>
+                    <select id="catSelect" class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm font-bold bg-slate-50 outline-none">
+                        <option value="資産・実績">資産・実績</option>
+                        <option value="現実・制約">現実・制約</option>
+                        <option value="感情・動機">感情・動機</option>
+                        <option value="想定推移">想定推移</option>
+                        <option value="仕組み・手段">仕組み・手段</option>
+                        <option value="理想・目的">理想・目的</option>
+                        <option value="担当者">担当者</option>
+                    </select>
+                </div>
+            </div>
+
+            <textarea id="nodeInput" placeholder="要素を入力..." class="w-full border-2 border-slate-50 p-4 rounded-xl text-sm h-32 outline-none font-bold"></textarea>
+            <button id="mainBtn" onclick="handleMainBtnClick()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black italic uppercase shadow-md active:scale-95 transition">要素を追加</button>
             
             <div class="pt-4 border-t border-slate-100">
                 <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">画像を挿入</label>
                 <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
-                <button onclick="document.getElementById('imageInput').click()" class="w-full bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold text-xs border border-indigo-100 hover:bg-indigo-100">画像を選択</button>
+                <button onclick="document.getElementById('imageInput').click()" class="w-full bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold text-xs border border-indigo-100 hover:bg-indigo-100 transition">画像を選択</button>
             </div>
         </div>
 
@@ -110,10 +117,21 @@
         const svgLayer = document.getElementById('svgLayer');
         const nodeLayer = document.getElementById('nodeLayer');
 
+        window.onload = () => { 
+            setTool('move'); 
+            // Escキーで選択解除するイベントリスナー
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    deselect();
+                }
+            });
+        };
+
         function setTool(t) {
             tool = t;
             ['move', 'pen', 'eraser'].forEach(id => {
-                document.getElementById('btn-' + id).className = `px-4 py-1.5 rounded-lg text-xs font-bold transition ${tool===id?'bg-indigo-600 text-white':'text-slate-400'}`;
+                const btn = document.getElementById('btn-' + id);
+                if(btn) btn.className = `px-4 py-1.5 rounded-lg text-xs font-bold transition ${tool===id?'bg-indigo-600 text-white':'text-slate-400'}`;
             });
             container.className = `canvas-container mode-${tool}`;
             if(tool === 'eraser') document.body.classList.add('eraser-active');
@@ -125,6 +143,7 @@
             nodeDisplayMode = m;
             document.getElementById('modeBox').className = m === 'box' ? 'p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
             document.getElementById('modeText').className = m === 'text' ? 'p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
+            document.getElementById('categorySection').style.display = m === 'box' ? 'block' : 'none';
         }
 
         container.addEventListener('wheel', (e) => {
@@ -188,32 +207,30 @@
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (event) => {
-                createNode({ type: 'image', src: event.target.result });
-            };
+            reader.onload = (event) => { createNode({ type: 'image', src: event.target.result }); };
             reader.readAsDataURL(file);
         }
 
         function createNode(data = null) {
             const el = document.createElement('div');
-            const id = "n" + Date.now(); el.id = id;
-            const type = data?.type || nodeDisplayMode;
+            const id = data ? data.id : "n" + Date.now(); el.id = id;
+            const type = data ? data.type : nodeDisplayMode;
             
             if (type === 'image') {
                 el.className = 'node node-image';
-                el.style.width = "200px";
+                el.style.width = data?.width || "200px";
                 el.innerHTML = `<img src="${data.src}">`;
                 addResizer(el);
             } else {
                 const text = data ? data.text : document.getElementById('nodeInput').value;
-                if (!text.trim()) return;
                 const cat = data ? data.cat : document.getElementById('catSelect').value;
+                if (!text.trim()) return;
                 applyNodeStyle(el, type, text, cat);
             }
 
             const rect = container.getBoundingClientRect();
-            el.style.left = ((-panX + rect.width/2 - 100)/scale) + "px";
-            el.style.top = ((-panY + rect.height/2 - 100)/scale) + "px";
+            el.style.left = data ? data.left : ((-panX + rect.width/2 - 100)/scale) + "px";
+            el.style.top = data ? data.top : ((-panY + rect.height/2 - 100)/scale) + "px";
 
             el.onmousedown = (e) => {
                 if(tool === 'eraser' || e.target.classList.contains('resizer')) return;
@@ -231,8 +248,17 @@
             el.onclick = (e) => {
                 e.stopPropagation();
                 if (tool === 'eraser') return;
+                
                 if (!selectedId) {
-                    selectedId = id; el.classList.add('selected');
+                    selectedId = id; 
+                    el.classList.add('selected');
+                    const nData = nodes.find(n => n.id === id);
+                    if(nData && nData.type !== 'image') {
+                        document.getElementById('nodeInput').value = nData.text;
+                        document.getElementById('catSelect').value = nData.cat;
+                        document.getElementById('mainBtn').innerText = "内容を変更";
+                        setNodeDisplayMode(nData.type);
+                    }
                 } else if (selectedId === id) {
                     deselect();
                 } else {
@@ -243,43 +269,60 @@
 
             el.oncontextmenu = (e) => { e.preventDefault(); deleteNode(id); };
             nodeLayer.appendChild(el);
-            nodes.push({ id, el });
-            document.getElementById('nodeInput').value = '';
-        }
-
-        function addResizer(node) {
-            const resizer = document.createElement('div');
-            resizer.className = 'resizer';
-            node.appendChild(resizer);
-            resizer.onmousedown = (e) => {
-                e.stopPropagation(); e.preventDefault();
-                let startW = node.offsetWidth, startH = node.offsetHeight, sx = e.clientX, sy = e.clientY;
-                const mm = (me) => {
-                    const newW = startW + (me.clientX - sx) / scale;
-                    node.style.width = newW + "px";
-                    // テキストノード以外（画像など）はアスペクト比を何となく維持
-                    if(node.classList.contains('node-image')) {
-                        node.style.height = "auto";
-                    }
-                    connections.forEach(c => c.line.position());
-                };
-                const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
-                document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
-            };
+            nodes.push({ id, el, type, text: data?.text || document.getElementById('nodeInput').value, cat: data?.cat || document.getElementById('catSelect').value });
+            if(!data) { document.getElementById('nodeInput').value = ''; }
         }
 
         function applyNodeStyle(el, type, text, cat) {
-            el.innerHTML = ''; el.setAttribute('data-type', type); el.setAttribute('data-cat', cat);
+            el.innerHTML = ''; el.setAttribute('data-type', type);
             if (type === 'text') {
                 el.className = 'node node-text-only'; el.innerHTML = text.replace(/\n/g, '<br>');
             } else {
                 el.className = 'node';
                 const inner = document.createElement('div');
                 inner.className = `node-box ${getCatClass(cat)}`;
-                inner.innerHTML = `<div class="text-[8px] opacity-50 font-black uppercase">${cat}</div><div class="text-sm font-bold">${text.replace(/\n/g, '<br>')}</div>`;
+                inner.innerHTML = `
+                    <div class="text-[8px] font-black uppercase flex justify-between items-center mb-1">
+                        <span>${cat}</span>
+                    </div>
+                    <div class="text-sm font-bold leading-tight">${text.replace(/\n/g, '<br>')}</div>`;
                 el.appendChild(inner);
                 addResizer(el);
             }
+        }
+
+        function updateNode(id) {
+            const n = nodes.find(x => x.id === id);
+            const text = document.getElementById('nodeInput').value;
+            const cat = document.getElementById('catSelect').value;
+            if(!n || n.type === 'image' || !text.trim()) return;
+
+            n.text = text;
+            n.cat = cat;
+            n.type = nodeDisplayMode;
+
+            applyNodeStyle(n.el, n.type, n.text, n.cat);
+            
+            deselect();
+            connections.forEach(c => c.line.position());
+        }
+
+        function addResizer(node) {
+            if (node.querySelector('.resizer')) return;
+            const resizer = document.createElement('div');
+            resizer.className = 'resizer';
+            node.appendChild(resizer);
+            resizer.onmousedown = (e) => {
+                e.stopPropagation(); e.preventDefault();
+                let startW = node.offsetWidth, sx = e.clientX;
+                const mm = (me) => {
+                    node.style.width = (startW + (me.clientX - sx) / scale) + "px";
+                    node.style.height = "auto";
+                    connections.forEach(c => c.line.position());
+                };
+                const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
+                document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
+            };
         }
 
         function connectNodes(sid, eid) {
@@ -304,13 +347,26 @@
         }
 
         function getCatClass(c) {
-            const m = {'資産・実績': 'cat-assets', '現実・制約': 'cat-reality', '感情・動機': 'cat-emotion', '想定推移': 'cat-projected', '仕組み・手段': 'cat-mechanism', '理想・目的': 'cat-ideal'};
+            const m = {
+                '資産・実績': 'cat-assets', 
+                '現実・制約': 'cat-reality', 
+                '感情・動機': 'cat-emotion', 
+                '想定推移': 'cat-projected', 
+                '仕組み・手段': 'cat-mechanism', 
+                '理想・目的': 'cat-ideal',
+                '担当者': 'cat-owner'
+            };
             return m[c] || 'cat-ideal';
         }
 
         function deselect() {
-            if (selectedId) { document.getElementById(selectedId)?.classList.remove('selected'); selectedId = null; }
+            if (selectedId) { 
+                const el = document.getElementById(selectedId);
+                if(el) el.classList.remove('selected');
+                selectedId = null; 
+            }
             document.getElementById('nodeInput').value = '';
+            document.getElementById('mainBtn').innerText = "要素を追加";
         }
 
         function resetView() { panX = 0; panY = 0; scale = 1; updateTransform(); }
