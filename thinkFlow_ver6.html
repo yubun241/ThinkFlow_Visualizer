@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ThinkFlow Pro - Full Integrated</title>
+    <title>ThinkFlow Pro - With Undo</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.1.9/leader-line.min.js"></script>
     <style>
@@ -16,19 +16,15 @@
             background-size: 30px 30px;
         }
         #viewport { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; pointer-events: none; }
-        
         .node { position: absolute; cursor: grab; user-select: none; z-index: 20; min-width: 50px; pointer-events: auto; }
         .node.selected { outline: 4px solid #6366f1; outline-offset: 4px; z-index: 50; }
         .node-box { padding: 14px; border-radius: 12px; border: 2px solid; background: white; width: 100%; height: 100%; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        
-        /* 枠なしモード用スタイル */
         .node-text-only { border: none; background: transparent; font-weight: 900; font-size: 1.5rem; color: #1e293b; white-space: nowrap; box-shadow: none; }
         .node-text-only .cat-label { font-size: 0.6rem; text-transform: uppercase; opacity: 0.5; display: block; margin-bottom: -4px; }
-
         .resizer { width: 16px; height: 16px; background: #6366f1; position: absolute; right: 0; bottom: 0; cursor: se-resize; border-radius: 4px 0 10px 0; opacity: 0; z-index: 30; }
         .node:hover .resizer { opacity: 1; }
-
-        /* カテゴリー別カラー設定 */
+        
+        /* カラー設定 */
         .cat-assets { border-color: #3b82f6; color: #1e40af; background-color: #eff6ff; }
         .cat-reality { border-color: #94a3b8; color: #1e293b; background-color: #f8fafc; }
         .cat-emotion { border-color: #ec4899; color: #9d174d; background-color: #fdf2f8; }
@@ -47,11 +43,9 @@
         #svgLayer { position: absolute; top: 0; left: 0; width: 10000px; height: 10000px; overflow: visible; pointer-events: none; z-index: 10; }
         .drawn-line { stroke: #000; stroke-width: 3; fill: none; pointer-events: none; }
         body.eraser-active .drawn-line { pointer-events: auto !important; cursor: pointer !important; stroke-width: 15px; stroke: rgba(239, 68, 68, 0.2); }
-        
         .mode-move { cursor: grab !important; }
         .mode-pen { cursor: crosshair !important; }
         .mode-eraser { cursor: cell !important; }
-
         body.eraser-active .leader-line { pointer-events: auto !important; z-index: 99999 !important; }
     </style>
 </head>
@@ -67,6 +61,7 @@
                 </div>
             </div>
             <div class="flex gap-2 font-bold text-[10px]">
+                <button onclick="undo()" class="bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700">元に戻す (Ctrl+Z)</button>
                 <button onclick="resetView()" class="bg-slate-100 px-4 py-2 rounded-xl">視点リセット</button>
                 <button onclick="clearAll()" class="bg-red-50 text-red-500 px-4 py-2 rounded-xl">全消去</button>
             </div>
@@ -75,18 +70,13 @@
 
     <div class="flex flex-1 overflow-hidden gap-6 px-6 pb-6">
         <div class="w-80 bg-white p-6 rounded-3xl shadow-xl border border-slate-200 space-y-6 h-full overflow-y-auto">
-            
-            <!-- 表示モード切り替え -->
             <div class="grid grid-cols-2 gap-2">
                 <button onclick="setDisplayMode('box')" id="modeBox" class="p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700">枠あり</button>
                 <button onclick="setDisplayMode('text')" id="modeText" class="p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400">枠なし</button>
             </div>
-
             <div class="space-y-4">
                 <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block">要素の追加</label>
-                
                 <div>
-                    <label class="text-[9px] font-bold text-slate-400 block mb-1">カテゴリー</label>
                     <select id="catSelect" class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm font-bold bg-slate-50 outline-none">
                         <optgroup label="基本カテゴリー">
                             <option value="資産・実績" data-class="cat-assets">資産・実績</option>
@@ -110,22 +100,14 @@
                         </optgroup>
                     </select>
                 </div>
-
-                <div>
-                    <label class="text-[9px] font-bold text-slate-400 block mb-1">内容</label>
-                    <textarea id="nodeInput" placeholder="内容を入力..." class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm h-32 outline-none font-bold"></textarea>
-                </div>
-
+                <textarea id="nodeInput" placeholder="内容を入力..." class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm h-32 outline-none font-bold"></textarea>
                 <button id="mainBtn" onclick="handleMainBtnClick()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black italic uppercase shadow-md active:scale-95 transition">要素を追加</button>
             </div>
-            
             <div class="pt-4 border-t border-slate-100">
-                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">画像を挿入</label>
                 <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
                 <button onclick="document.getElementById('imageInput').click()" class="w-full bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold text-xs border border-indigo-100 hover:bg-indigo-100 transition">画像を選択</button>
             </div>
         </div>
-
         <div class="canvas-container mode-move" id="container" onmousedown="onCanvasDown(event)" oncontextmenu="return false;">
             <div id="viewport">
                 <svg id="svgLayer"></svg>
@@ -135,20 +117,28 @@
     </div>
 
     <script>
-        let tool = 'move', nodeDisplayMode = 'box', nodes = [], connections = [], selectedId = null;
+        let tool = 'move', nodeDisplayMode = 'box', nodes = [], connections = [], history = [], selectedId = null;
         let scale = 1, panX = 0, panY = 0;
-        
-        const container = document.getElementById('container');
-        const viewport = document.getElementById('viewport');
-        const svgLayer = document.getElementById('svgLayer');
-        const nodeLayer = document.getElementById('nodeLayer');
+        const container = document.getElementById('container'), viewport = document.getElementById('viewport'), svgLayer = document.getElementById('svgLayer'), nodeLayer = document.getElementById('nodeLayer');
 
         window.onload = () => { 
             setTool('move'); 
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') deselect();
+                if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
             });
         };
+
+        function pushHistory(action, data) { history.push({ action, data }); if(history.length > 50) history.shift(); }
+
+        function undo() {
+            if (history.length === 0) return;
+            const last = history.pop();
+            if (last.action === 'addNode') deleteNode(last.data.id, false);
+            else if (last.action === 'addLine') last.data.el.remove();
+            else if (last.action === 'addConn') { last.data.line.remove(); connections = connections.filter(c => c !== last.data); }
+            else if (last.action === 'deleteNode') createNode(last.data, false);
+        }
 
         function setTool(t) {
             tool = t;
@@ -159,7 +149,6 @@
             container.className = `canvas-container mode-${tool}`;
             if(tool === 'eraser') document.body.classList.add('eraser-active');
             else document.body.classList.remove('eraser-active');
-            connections.forEach(c => c.line.position());
         }
 
         function setDisplayMode(m) {
@@ -175,8 +164,7 @@
             const rect = container.getBoundingClientRect();
             panX = (e.clientX - rect.left) - ((e.clientX - rect.left) - panX) * (newScale / scale);
             panY = (e.clientY - rect.top) - ((e.clientY - rect.top) - panY) * (newScale / scale);
-            scale = newScale;
-            updateTransform();
+            scale = newScale; updateTransform();
         }, { passive: false });
 
         function updateTransform() {
@@ -194,193 +182,103 @@
                 const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
                 document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
             } else if (tool === 'pen') {
-                let startX = (e.clientX - rect.left - panX) / scale;
-                let startY = (e.clientY - rect.top - panY) / scale;
+                let startX = (e.clientX - rect.left - panX) / scale, startY = (e.clientY - rect.top - panY) / scale;
                 let temp = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-                temp.setAttribute("class", "temp-line");
-                svgLayer.appendChild(temp);
+                temp.setAttribute("class", "temp-line"); svgLayer.appendChild(temp);
                 const mm = (me) => {
-                    let cx = (me.clientX - rect.left - panX) / scale;
-                    let cy = (me.clientY - rect.top - panY) / scale;
+                    let cx = (me.clientX - rect.left - panX) / scale, cy = (me.clientY - rect.top - panY) / scale;
                     temp.setAttribute("points", `${startX},${startY} ${cx},${cy}`);
                 };
                 const mu = () => {
                     if (temp.getAttribute("points")) {
                         const l = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-                        l.setAttribute("class", "drawn-line");
-                        l.setAttribute("points", temp.getAttribute("points"));
+                        l.setAttribute("class", "drawn-line"); l.setAttribute("points", temp.getAttribute("points"));
                         l.onmousedown = (ev) => { if(tool==='eraser') { ev.stopPropagation(); l.remove(); } };
-                        svgLayer.appendChild(l);
+                        svgLayer.appendChild(l); pushHistory('addLine', { el: l });
                     }
-                    temp.remove();
-                    document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu);
+                    temp.remove(); document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu);
                 };
                 document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
             }
         }
 
-        function handleMainBtnClick() {
-            if (selectedId) updateNode(selectedId);
-            else {
-                const select = document.getElementById('catSelect');
-                createNode({ 
-                    text: document.getElementById('nodeInput').value, 
-                    cat: select.value, 
-                    customClass: select.options[select.selectedIndex].getAttribute('data-class'),
-                    displayMode: nodeDisplayMode
-                });
-            }
+        function handleMainBtnClick() { if (selectedId) updateNode(selectedId); else createCategorizedNode(); }
+        function createCategorizedNode() {
+            const select = document.getElementById('catSelect');
+            createNode({ text: document.getElementById('nodeInput').value, cat: select.value, customClass: select.options[select.selectedIndex].getAttribute('data-class'), displayMode: nodeDisplayMode });
         }
 
-        function handleImageUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => { createNode({ type: 'image', src: event.target.result }); };
-            reader.readAsDataURL(file);
-        }
-
-        function createNode(data) {
+        function createNode(data, record = true) {
+            if (!data.text && !data.src) return;
             const el = document.createElement('div');
-            const id = "n" + Date.now(); el.id = id;
+            const id = data.id || "n" + Date.now(); el.id = id;
             const type = data.type || 'box';
+            if (type === 'image') { el.className = 'node node-image'; el.style.width = "200px"; el.innerHTML = `<img src="${data.src}">`; }
+            else applyNodeStyle(el, data.text, data.cat, data.customClass, data.displayMode || 'box');
             
-            if (type === 'image') {
-                el.className = 'node node-image';
-                el.style.width = "200px";
-                el.innerHTML = `<img src="${data.src}">`;
-            } else {
-                applyNodeStyle(el, data.text, data.cat, data.customClass, data.displayMode);
-            }
-
             const rect = container.getBoundingClientRect();
-            el.style.left = ((-panX + rect.width/2 - 100)/scale) + "px";
-            el.style.top = ((-panY + rect.height/2 - 100)/scale) + "px";
+            el.style.left = data.left || ((-panX + rect.width/2 - 100)/scale) + "px";
+            el.style.top = data.top || ((-panY + rect.height/2 - 100)/scale) + "px";
 
             el.onmousedown = (e) => {
                 if(tool === 'eraser' || e.target.classList.contains('resizer')) return;
                 e.stopPropagation();
                 let sx = e.clientX, sy = e.clientY, ol = parseFloat(el.style.left), ot = parseFloat(el.style.top);
-                const mm = (me) => {
-                    el.style.left = (ol + (me.clientX - sx) / scale) + "px";
-                    el.style.top = (ot + (me.clientY - sy) / scale) + "px";
-                    connections.forEach(c => c.line.position());
-                };
+                const mm = (me) => { el.style.left = (ol + (me.clientX - sx) / scale) + "px"; el.style.top = (ot + (me.clientY - sy) / scale) + "px"; connections.forEach(c => c.line.position()); };
                 const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
                 document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
             };
 
             el.onclick = (e) => {
-                e.stopPropagation();
-                if (tool === 'eraser') { deleteNode(id); return; }
-                if (!selectedId) {
-                    selectedId = id; el.classList.add('selected');
-                    const nData = nodes.find(n => n.id === id);
-                    if(nData && nData.type !== 'image') {
-                        document.getElementById('nodeInput').value = nData.text;
-                        document.getElementById('catSelect').value = nData.cat;
-                        setDisplayMode(nData.displayMode);
-                    }
-                } else if (selectedId === id) {
-                    deselect();
-                } else {
-                    connectNodes(selectedId, id);
-                    deselect();
-                }
+                e.stopPropagation(); if (tool === 'eraser') { deleteNode(id); return; }
+                if (!selectedId) { selectedId = id; el.classList.add('selected'); }
+                else if (selectedId === id) deselect();
+                else { connectNodes(selectedId, id); deselect(); }
             };
 
-            nodeLayer.appendChild(el);
-            addResizer(el);
-            nodes.push({ id, el, type, text: data.text, cat: data.cat, customClass: data.customClass, displayMode: data.displayMode });
+            nodeLayer.appendChild(el); addResizer(el);
+            const nodeObj = { id, el, type, text: data.text, cat: data.cat, customClass: data.customClass, displayMode: data.displayMode, left: el.style.left, top: el.style.top, src: data.src };
+            nodes.push(nodeObj);
+            if (record) pushHistory('addNode', nodeObj);
             document.getElementById('nodeInput').value = '';
         }
 
         function applyNodeStyle(el, text, cat, customClass, displayMode) {
             el.innerHTML = '';
-            if (displayMode === 'text') {
-                el.className = `node node-text-only`;
-                el.innerHTML = `<span class="cat-label">${cat}</span>${text.replace(/\n/g, '<br>')}`;
-            } else {
-                el.className = `node`;
-                const inner = document.createElement('div');
-                inner.className = `node-box ${customClass}`;
-                inner.innerHTML = `
-                    <div class="text-[8px] font-black uppercase mb-1 opacity-60">${cat}</div>
-                    <div class="text-sm font-bold leading-tight">${text.replace(/\n/g, '<br>')}</div>`;
-                el.appendChild(inner);
-            }
-        }
-
-        function updateNode(id) {
-            const n = nodes.find(x => x.id === id);
-            const text = document.getElementById('nodeInput').value;
-            const select = document.getElementById('catSelect');
-            if(!n || n.type === 'image' || !text.trim()) return;
-            n.text = text;
-            n.cat = select.value;
-            n.customClass = select.options[select.selectedIndex].getAttribute('data-class');
-            n.displayMode = nodeDisplayMode;
-            applyNodeStyle(n.el, n.text, n.cat, n.customClass, n.displayMode);
-            deselect();
-            connections.forEach(c => c.line.position());
+            if (displayMode === 'text') { el.className = `node node-text-only`; el.innerHTML = `<span class="cat-label">${cat}</span>${text.replace(/\n/g, '<br>')}`; }
+            else { el.className = `node`; const inner = document.createElement('div'); inner.className = `node-box ${customClass}`; inner.innerHTML = `<div class="text-[8px] font-black uppercase mb-1 opacity-60">${cat}</div><div class="text-sm font-bold leading-tight">${text.replace(/\n/g, '<br>')}</div>`; el.appendChild(inner); }
         }
 
         function addResizer(node) {
-            if (node.querySelector('.resizer')) return;
-            const resizer = document.createElement('div');
-            resizer.className = 'resizer';
-            node.appendChild(resizer);
+            const resizer = document.createElement('div'); resizer.className = 'resizer'; node.appendChild(resizer);
             resizer.onmousedown = (e) => {
                 e.stopPropagation(); e.preventDefault();
                 let startW = node.offsetWidth, sx = e.clientX;
-                const mm = (me) => {
-                    node.style.width = (startW + (me.clientX - sx) / scale) + "px";
-                    node.style.height = "auto";
-                    connections.forEach(c => c.line.position());
-                };
+                const mm = (me) => { node.style.width = (startW + (me.clientX - sx) / scale) + "px"; connections.forEach(c => c.line.position()); };
                 const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
                 document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
             };
         }
 
         function connectNodes(sid, eid) {
-            const line = new LeaderLine(document.getElementById(sid), document.getElementById(eid), {
-                color: '#475569', size: 2, path: 'fluid', endPlug: 'arrow'
-            });
-            const conn = { line, sid, eid };
-            connections.push(conn);
+            const line = new LeaderLine(document.getElementById(sid), document.getElementById(eid), { color: '#475569', size: 2, path: 'fluid', endPlug: 'arrow' });
+            const conn = { line, sid, eid }; connections.push(conn);
+            pushHistory('addConn', conn);
             setTimeout(() => {
-                const svgs = document.querySelectorAll('.leader-line');
-                const lastSvg = svgs[svgs.length - 1];
-                if(lastSvg) {
-                    lastSvg.style.pointerEvents = 'auto';
-                    lastSvg.addEventListener('mousedown', (e) => {
-                        if(tool === 'eraser') {
-                            e.stopPropagation(); line.remove();
-                            connections = connections.filter(x => x !== conn);
-                        }
-                    });
-                }
+                const svgs = document.querySelectorAll('.leader-line'); const lastSvg = svgs[svgs.length - 1];
+                if(lastSvg) { lastSvg.style.pointerEvents = 'auto'; lastSvg.addEventListener('mousedown', (e) => { if(tool === 'eraser') { e.stopPropagation(); line.remove(); connections = connections.filter(x => x !== conn); } }); }
             }, 100);
         }
 
-        function deselect() {
-            if (selectedId) { 
-                const el = document.getElementById(selectedId);
-                if(el) el.classList.remove('selected');
-                selectedId = null; 
-            }
-            document.getElementById('nodeInput').value = '';
-            document.getElementById('mainBtn').innerText = "要素を追加";
-        }
-
-        function resetView() { panX = 0; panY = 0; scale = 1; updateTransform(); }
-        function deleteNode(id) {
+        function deselect() { if (selectedId) { const el = document.getElementById(selectedId); if(el) el.classList.remove('selected'); selectedId = null; } document.getElementById('nodeInput').value = ''; }
+        function deleteNode(id, record = true) {
             const n = nodes.find(x => x.id === id); if(!n) return;
+            if (record) pushHistory('deleteNode', n);
             connections.filter(c => c.sid === id || c.eid === id).forEach(c => { c.line.remove(); connections = connections.filter(x => x !== c); });
-            n.el.remove(); nodes = nodes.filter(x => x.id !== id);
-            deselect();
+            n.el.remove(); nodes = nodes.filter(x => x.id !== id); deselect();
         }
+        function handleImageUpload(e) { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (ev) => createNode({ type: 'image', src: ev.target.result }); reader.readAsDataURL(file); }
+        function resetView() { panX = 0; panY = 0; scale = 1; updateTransform(); }
         function clearAll() { if(confirm("全て消去しますか？")) location.reload(); }
     </script>
 </body>
