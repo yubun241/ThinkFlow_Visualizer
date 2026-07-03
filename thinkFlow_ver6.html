@@ -3,367 +3,324 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ThinkFlow Pro - Seamless Infinite</title>
+    <title>ThinkFlow Pro - Image Resizing</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.1.9/leader-line.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         body { background-color: #f1f5f9; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
-        
-        /* 無限背景の設定 */
         .canvas-container { 
             flex: 1; position: relative; overflow: hidden; 
             border-radius: 1.5rem; margin: 0 24px 24px 24px;
-            background-color: #ffffff; /* ベースは白 */
+            background-color: #ffffff;
             background-image: radial-gradient(#cbd5e1 1.5px, transparent 1.5px); 
-            background-size: 30px 30px; 
-            cursor: grab;
+            background-size: 30px 30px;
         }
-        .canvas-container:active { cursor: grabbing; }
-
-        /* ノードを乗せるための透明なレイヤー */
-        #captureArea {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            transform-origin: 0 0; pointer-events: none;
-        }
+        #viewport { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; pointer-events: none; }
         
-        .node { position: absolute; cursor: grab; user-select: none; z-index: 20; min-width: 120px; pointer-events: auto; }
+        /* Node Styles */
+        .node { position: absolute; cursor: grab; user-select: none; z-index: 20; min-width: 50px; pointer-events: auto; }
         .node.selected { outline: 4px solid #6366f1; outline-offset: 4px; z-index: 50; }
         .node-box { padding: 14px; border-radius: 12px; border: 2px solid; background: white; width: 100%; height: 100%; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        .resizer { width: 14px; height: 14px; background: #6366f1; position: absolute; right: 0; bottom: 0; cursor: se-resize; border-radius: 4px 0 10px 0; opacity: 0; }
-        .node:hover .resizer { opacity: 1; }
+        .node-text-only { border: none; background: transparent; font-weight: 900; font-size: 1.8rem; color: #1e293b; white-space: nowrap; }
         
+        /* Image Node Specific */
+        .node-image { padding: 4px; background: white; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); display: flex; }
+        .node-image img { border-radius: 8px; width: 100%; height: 100%; display: block; pointer-events: none; object-fit: contain; }
+
+        /* Resizer Handle */
+        .resizer { width: 16px; height: 16px; background: #6366f1; position: absolute; right: 0; bottom: 0; cursor: se-resize; border-radius: 4px 0 10px 0; opacity: 0; z-index: 30; }
+        .node:hover .resizer { opacity: 1; }
+
+        /* Categories */
         .cat-assets { border-color: #3b82f6; color: #1e40af; background-color: #eff6ff; }
         .cat-reality { border-color: #94a3b8; color: #1e293b; background-color: #f8fafc; }
         .cat-emotion { border-color: #ec4899; color: #9d174d; background-color: #fdf2f8; }
         .cat-projected { border-color: #f59e0b; color: #92400e; background-color: #fffbeb; }
         .cat-mechanism { border-color: #6366f1; color: #3730a3; background-color: #eef2ff; }
         .cat-ideal { border-color: #10b981; color: #065f46; background-color: #f0fdf4; }
-        .node-text-only { border: none; background: transparent; font-weight: 900; font-size: 1.8rem; color: #1e293b; white-space: nowrap; pointer-events: auto; }
-        
-        .line-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-        .drawn-line { pointer-events: auto; cursor: pointer; stroke: #000000; stroke-width: 2; fill: none; }
-        .leader-line { filter: none !important; }
+
+        /* SVGs */
+        #svgLayer { position: absolute; top: 0; left: 0; width: 10000px; height: 10000px; overflow: visible; }
+        .drawn-line { stroke: #000; stroke-width: 3; fill: none; }
+        .temp-line { stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 5; fill: none; }
+
+        /* Tools */
+        .mode-move { cursor: grab !important; }
+        .mode-pen { cursor: crosshair !important; }
+        .mode-eraser { cursor: cell !important; }
+
+        body.eraser-active .leader-line { pointer-events: auto !important; z-index: 99999 !important; }
+        body.eraser-active .leader-line path { cursor: pointer !important; pointer-events: auto !important; stroke-width: 20px !important; stroke: rgba(239, 68, 68, 0.01) !important; }
+        body.eraser-active .leader-line path:nth-child(2) { stroke: rgba(239, 68, 68, 1) !important; stroke-width: 4px !important; }
     </style>
 </head>
 <body class="p-6">
     <div class="mx-auto w-full max-w-[1600px]">
         <header class="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
             <div class="flex items-center gap-4">
-                <h1 class="text-2xl font-black italic tracking-tighter uppercase">THINKFLOW <span class="text-indigo-600">PRO</span></h1>
-                <span id="zoomLabel" class="text-xs font-bold text-slate-400">100%</span>
+                <h1 class="text-2xl font-black italic tracking-tighter uppercase text-slate-800">THINKFLOW <span class="text-indigo-600">PRO</span></h1>
+                <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1">
+                    <button id="btn-move" onclick="setTool('move')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition">移動</button>
+                    <button id="btn-pen" onclick="setTool('pen')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition">ペン</button>
+                    <button id="btn-eraser" onclick="setTool('eraser')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition">消しゴム</button>
+                </div>
             </div>
-            <div class="flex gap-2 font-bold uppercase text-[10px]">
-                <button onclick="resetView()" class="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl hover:bg-slate-200">視点リセット</button>
-                <button onclick="undo()" class="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl hover:bg-slate-200">元に戻す</button>
-                <button onclick="exportPDF()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-500">PDF出力</button>
-                <button onclick="downloadData()" class="bg-slate-800 text-white px-4 py-2 rounded-xl">保存</button>
-                <button onclick="importData()" class="bg-slate-500 text-white px-4 py-2 rounded-xl">読込</button>
-                <button onclick="clearAll()" class="bg-red-50 text-red-500 px-4 py-2 rounded-xl hover:bg-red-100">全消去</button>
+            <div class="flex gap-2 font-bold text-[10px]">
+                <button onclick="resetView()" class="bg-slate-100 px-4 py-2 rounded-xl">視点リセット</button>
+                <button onclick="clearAll()" class="bg-red-50 text-red-500 px-4 py-2 rounded-xl">全消去</button>
             </div>
         </header>
     </div>
 
     <div class="flex flex-1 overflow-hidden gap-6 px-6 pb-6">
-        <!-- サイドバーは変更なし -->
-        <div class="w-80 bg-white p-6 rounded-3xl shadow-xl border border-slate-200 space-y-6 overflow-y-auto h-full">
-            <div>
-                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block text-center">表示モード</label>
-                <div class="grid grid-cols-2 gap-2">
-                    <button onclick="setMode('box')" id="modeBox" class="p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700">枠あり</button>
-                    <button onclick="setMode('text')" id="modeText" class="p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400">枠なし</button>
-                </div>
+        <div class="w-80 bg-white p-6 rounded-3xl shadow-xl border border-slate-200 space-y-6 h-full overflow-y-auto">
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="setNodeDisplayMode('box')" id="modeBox" class="p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700">枠あり</button>
+                <button onclick="setNodeDisplayMode('text')" id="modeText" class="p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400">枠なし</button>
             </div>
-            <div id="categorySection">
-                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">カテゴリー</label>
-                <select id="catSelect" class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm font-bold bg-slate-50">
-                    <option value="資産・実績">資産・実績</option>
-                    <option value="現実・制約">現実・制約</option>
-                    <option value="感情・動機">感情・動機</option>
-                    <option value="想定推移">想定推移</option>
-                    <option value="仕組み・手段">仕組み・手段</option>
-                    <option value="理想・目的">理想・目的</option>
-                </select>
-            </div>
-            <textarea id="nodeInput" placeholder="内容を入力..." class="w-full border-2 border-slate-50 p-4 rounded-xl text-sm h-32 outline-none focus:border-indigo-300 bg-slate-50 font-bold"></textarea>
-            <button id="mainBtn" onclick="handleMainBtnClick()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition shadow-lg uppercase tracking-widest italic">要素を追加</button>
-            <div class="bg-indigo-50 p-4 rounded-2xl text-[10px] text-indigo-900 border border-indigo-100 leading-relaxed shadow-sm">
-                <p class="font-black mb-1 text-center italic uppercase tracking-tighter text-xs underline">Navigation</p>
-                <p>● <strong>移動:</strong> 右ドラッグ or 背景を掴む</p>
-                <p>● <strong>拡大縮小:</strong> マウスホイール</p>
+            <select id="catSelect" class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm font-bold bg-slate-50 outline-none">
+                <option value="資産・実績">資産・実績</option><option value="現実・制約">現実・制約</option>
+                <option value="感情・動機">感情・動機</option><option value="想定推移">想定推移</option>
+                <option value="仕組み・手段">仕組み・手段</option><option value="理想・目的">理想・目的</option>
+            </select>
+            <textarea id="nodeInput" placeholder="思考を入力..." class="w-full border-2 border-slate-50 p-4 rounded-xl text-sm h-32 outline-none font-bold"></textarea>
+            <button onclick="handleMainBtnClick()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black italic uppercase shadow-md active:scale-95 transition">要素を追加</button>
+            
+            <div class="pt-4 border-t border-slate-100">
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">画像を挿入</label>
+                <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                <button onclick="document.getElementById('imageInput').click()" class="w-full bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold text-xs border border-indigo-100 hover:bg-indigo-100">画像を選択</button>
             </div>
         </div>
 
-        <!-- メインキャンバス -->
-        <div class="canvas-container" id="container" onmousedown="handleCanvasMouseDown(event)" oncontextmenu="return false;">
-            <div id="captureArea">
-                <svg id="svgArea" class="line-svg"></svg>
-                <div id="canvasInner" class="w-full h-full relative pointer-events-none"></div>
+        <div class="canvas-container mode-move" id="container" onmousedown="onCanvasDown(event)" oncontextmenu="return false;">
+            <div id="viewport">
+                <svg id="svgLayer"></svg>
+                <div id="nodeLayer"></div>
             </div>
         </div>
     </div>
 
     <script>
-        let currentMode = 'box', nodes = [], connections = [], selectedNodeId = null, undoStack = [];
-        let scale = 1, offsetX = 0, offsetY = 0;
+        let tool = 'move', nodeDisplayMode = 'box', nodes = [], connections = [], selectedId = null;
+        let scale = 1, panX = 0, panY = 0;
+        
         const container = document.getElementById('container');
-        const captureArea = document.getElementById('captureArea');
-        const svgArea = document.getElementById('svgArea');
+        const viewport = document.getElementById('viewport');
+        const svgLayer = document.getElementById('svgLayer');
+        const nodeLayer = document.getElementById('nodeLayer');
 
-        window.onload = () => { loadFromLocal(); };
+        function setTool(t) {
+            tool = t;
+            ['move', 'pen', 'eraser'].forEach(id => {
+                document.getElementById('btn-' + id).className = `px-4 py-1.5 rounded-lg text-xs font-bold transition ${tool===id?'bg-indigo-600 text-white':'text-slate-400'}`;
+            });
+            container.className = `canvas-container mode-${tool}`;
+            if(tool === 'eraser') document.body.classList.add('eraser-active');
+            else document.body.classList.remove('eraser-active');
+            connections.forEach(c => c.line.position());
+        }
 
-        // ズーム（ホイールスクロール）
+        function setNodeDisplayMode(m) {
+            nodeDisplayMode = m;
+            document.getElementById('modeBox').className = m === 'box' ? 'p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
+            document.getElementById('modeText').className = m === 'text' ? 'p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
+        }
+
         container.addEventListener('wheel', (e) => {
             e.preventDefault();
             const delta = e.deltaY > 0 ? 0.9 : 1.1;
-            const newScale = Math.min(Math.max(scale * delta, 0.1), 5);
-            
+            const newScale = Math.min(Math.max(scale * delta, 0.2), 4);
             const rect = container.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-
-            offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
-            offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
-            
+            panX = (e.clientX - rect.left) - ((e.clientX - rect.left) - panX) * (newScale / scale);
+            panY = (e.clientY - rect.top) - ((e.clientY - rect.top) - panY) * (newScale / scale);
             scale = newScale;
             updateTransform();
         }, { passive: false });
 
         function updateTransform() {
-            // 背景のドットも一緒に移動・ズームさせる
-            container.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
+            container.style.backgroundPosition = `${panX}px ${panY}px`;
             container.style.backgroundSize = `${30 * scale}px ${30 * scale}px`;
-            
-            captureArea.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
-            document.getElementById('zoomLabel').innerText = Math.round(scale * 100) + "%";
+            viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
             connections.forEach(c => c.line.position());
         }
 
-        function handleCanvasMouseDown(e) {
-            // 背景ドラッグ（パン操作）
-            if (e.button === 2 || e.button === 0) { 
-                let sx = e.clientX, sy = e.clientY;
-                let ox = offsetX, oy = offsetY;
-
-                const onMouseMove = (me) => {
-                    offsetX = ox + (me.clientX - sx);
-                    offsetY = oy + (me.clientY - sy);
-                    updateTransform();
+        function onCanvasDown(e) {
+            const rect = container.getBoundingClientRect();
+            if (tool === 'move') {
+                let sx = e.clientX, sy = e.clientY, ox = panX, oy = panY;
+                const mm = (me) => { panX = ox + (me.clientX - sx); panY = oy + (me.clientY - sy); updateTransform(); };
+                const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
+                document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
+            } else if (tool === 'pen') {
+                if (e.target !== container && e.target.id !== 'svgLayer') return;
+                let startX = (e.clientX - rect.left - panX) / scale;
+                let startY = (e.clientY - rect.top - panY) / scale;
+                let temp = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+                temp.setAttribute("class", "temp-line");
+                svgLayer.appendChild(temp);
+                const mm = (me) => {
+                    let cx = (me.clientX - rect.left - panX) / scale;
+                    let cy = (me.clientY - rect.top - panY) / scale;
+                    temp.setAttribute("points", `${startX},${startY} ${cx},${cy}`);
                 };
-                const onMouseUp = () => {
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
+                const mu = () => {
+                    if (temp.getAttribute("points")) {
+                        const l = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+                        l.setAttribute("class", "drawn-line");
+                        l.setAttribute("points", temp.getAttribute("points"));
+                        l.onclick = (ev) => { if(tool==='eraser') { ev.stopPropagation(); l.remove(); } };
+                        svgLayer.appendChild(l);
+                    }
+                    temp.remove();
+                    document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu);
                 };
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
+                document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
             }
-        }
-
-        function resetView() {
-            scale = 1; offsetX = 0; offsetY = 0;
-            updateTransform();
         }
 
         function handleMainBtnClick() {
-            if (selectedNodeId) updateNode(selectedNodeId);
+            if (selectedId) updateNode(selectedId);
             else createNode();
         }
 
-        function createNode(data = null, isUndo = false) {
-            const inputValue = data ? data.text : document.getElementById('nodeInput').value;
-            if (!inputValue.trim()) return;
-            if (!isUndo && !data) pushUndo();
-
-            const nodeEl = document.createElement('div');
-            const id = data ? data.id : "node_" + Date.now();
-            nodeEl.id = id;
-            nodeEl.className = 'node';
-            applyNodeStyle(nodeEl, data ? data.type : currentMode, inputValue, data?.cat);
-
-            // 画面中央付近に配置
-            nodeEl.style.left = data ? data.left : ((-offsetX + 300) / scale) + "px";
-            nodeEl.style.top = data ? data.top : ((-offsetY + 300) / scale) + "px";
-            if(data?.width) nodeEl.style.width = data.width;
-            if(data?.height) nodeEl.style.height = data.height;
-
-            nodeEl.onmousedown = (e) => {
-                if(e.target.className === 'resizer' || e.button !== 0) return;
-                e.stopPropagation();
-                let sx = e.clientX, sy = e.clientY;
-                let ol = parseFloat(nodeEl.style.left), ot = parseFloat(nodeEl.style.top);
-                const onMouseMove = (me) => {
-                    nodeEl.style.left = (ol + (me.clientX - sx) / scale) + 'px';
-                    nodeEl.style.top = (ot + (me.clientY - sy) / scale) + 'px';
-                    nodes.find(n => n.id === id)?.lines.forEach(l => l.position());
-                };
-                const onMouseUp = () => {
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    saveToLocal();
-                };
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                createNode({ type: 'image', src: event.target.result });
             };
+            reader.readAsDataURL(file);
+        }
+
+        function createNode(data = null) {
+            const el = document.createElement('div');
+            const id = "n" + Date.now(); el.id = id;
+            const type = data?.type || nodeDisplayMode;
             
-            nodeEl.onclick = (e) => {
+            if (type === 'image') {
+                el.className = 'node node-image';
+                el.style.width = "200px";
+                el.innerHTML = `<img src="${data.src}">`;
+                addResizer(el);
+            } else {
+                const text = data ? data.text : document.getElementById('nodeInput').value;
+                if (!text.trim()) return;
+                const cat = data ? data.cat : document.getElementById('catSelect').value;
+                applyNodeStyle(el, type, text, cat);
+            }
+
+            const rect = container.getBoundingClientRect();
+            el.style.left = ((-panX + rect.width/2 - 100)/scale) + "px";
+            el.style.top = ((-panY + rect.height/2 - 100)/scale) + "px";
+
+            el.onmousedown = (e) => {
+                if(tool === 'eraser' || e.target.classList.contains('resizer')) return;
                 e.stopPropagation();
-                if (!selectedNodeId) {
-                    selectedNodeId = id; 
-                    nodeEl.classList.add('selected');
-                    document.getElementById('nodeInput').value = nDataToText(nodeEl);
-                    document.getElementById('mainBtn').innerText = "内容を変更";
-                } else if (selectedNodeId === id) {
+                let sx = e.clientX, sy = e.clientY, ol = parseFloat(el.style.left), ot = parseFloat(el.style.top);
+                const mm = (me) => {
+                    el.style.left = (ol + (me.clientX - sx) / scale) + "px";
+                    el.style.top = (ot + (me.clientY - sy) / scale) + "px";
+                    connections.forEach(c => c.line.position());
+                };
+                const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
+                document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
+            };
+
+            el.onclick = (e) => {
+                e.stopPropagation();
+                if (tool === 'eraser') return;
+                if (!selectedId) {
+                    selectedId = id; el.classList.add('selected');
+                } else if (selectedId === id) {
                     deselect();
                 } else {
-                    pushUndo();
-                    connectNodes(selectedNodeId, id, "arrow");
+                    connectNodes(selectedId, id);
                     deselect();
                 }
             };
 
-            nodeEl.oncontextmenu = (e) => { e.preventDefault(); pushUndo(); deleteNode(id); };
-            document.getElementById('canvasInner').appendChild(nodeEl);
-            nodes.push({ id, el: nodeEl, lines: [] });
-            if (!data) { document.getElementById('nodeInput').value = ''; saveToLocal(); }
+            el.oncontextmenu = (e) => { e.preventDefault(); deleteNode(id); };
+            nodeLayer.appendChild(el);
+            nodes.push({ id, el });
+            document.getElementById('nodeInput').value = '';
         }
 
-        // --- 以前のロジックを流用 ---
-        function applyNodeStyle(el, type, text, cat) {
-            el.innerHTML = ''; el.setAttribute('data-type', type);
-            if (type === 'text') {
-                el.className = 'node node-text-only';
-                el.innerHTML = text.replace(/\n/g, '<br>');
-            } else {
-                const category = cat || document.getElementById('catSelect').value;
-                el.className = 'node'; el.setAttribute('data-cat', category);
-                const inner = document.createElement('div');
-                inner.className = `node-box ${getCatClass(category)}`;
-                inner.innerHTML = `<div class="text-[8px] opacity-50 font-black mb-1 uppercase tracking-tighter">${category}</div><div class="text-sm font-bold leading-tight">${text.replace(/\n/g, '<br>')}</div>`;
-                el.appendChild(inner);
-                const resizer = document.createElement('div');
-                resizer.className = 'resizer'; el.appendChild(resizer);
-                initResize(el, resizer);
-            }
-        }
-
-        function initResize(node, resizer) {
+        function addResizer(node) {
+            const resizer = document.createElement('div');
+            resizer.className = 'resizer';
+            node.appendChild(resizer);
             resizer.onmousedown = (e) => {
                 e.stopPropagation(); e.preventDefault();
-                let sw = node.offsetWidth, sh = node.offsetHeight, sx = e.clientX, sy = e.clientY;
-                const onMouseMove = (me) => {
-                    node.style.width = (sw + (me.clientX - sx) / scale) + 'px';
-                    node.style.height = (sh + (me.clientY - sy) / scale) + 'px';
-                    nodes.find(n => n.id === node.id)?.lines.forEach(l => l.position());
+                let startW = node.offsetWidth, startH = node.offsetHeight, sx = e.clientX, sy = e.clientY;
+                const mm = (me) => {
+                    const newW = startW + (me.clientX - sx) / scale;
+                    node.style.width = newW + "px";
+                    // テキストノード以外（画像など）はアスペクト比を何となく維持
+                    if(node.classList.contains('node-image')) {
+                        node.style.height = "auto";
+                    }
+                    connections.forEach(c => c.line.position());
                 };
-                const onMouseUp = () => {
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    saveToLocal();
-                };
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
+                const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
+                document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
+            };
+        }
+
+        function applyNodeStyle(el, type, text, cat) {
+            el.innerHTML = ''; el.setAttribute('data-type', type); el.setAttribute('data-cat', cat);
+            if (type === 'text') {
+                el.className = 'node node-text-only'; el.innerHTML = text.replace(/\n/g, '<br>');
+            } else {
+                el.className = 'node';
+                const inner = document.createElement('div');
+                inner.className = `node-box ${getCatClass(cat)}`;
+                inner.innerHTML = `<div class="text-[8px] opacity-50 font-black uppercase">${cat}</div><div class="text-sm font-bold">${text.replace(/\n/g, '<br>')}</div>`;
+                el.appendChild(inner);
+                addResizer(el);
             }
         }
 
-        function connectNodes(startId, endId, type, isRestore = false) {
-            const startEl = document.getElementById(startId);
-            const endEl = document.getElementById(endId);
-            if (!startEl || !endEl) return;
-            const line = new LeaderLine(startEl, endEl, {
-                color: "#000000", size: 2, path: "fluid", outline: false,
-                endPlug: "arrow"
+        function connectNodes(sid, eid) {
+            const line = new LeaderLine(document.getElementById(sid), document.getElementById(eid), {
+                color: '#000', size: 2, path: 'fluid', endPlug: 'arrow'
             });
-            connections.push({ line, startId, endId, type });
-            nodes.find(n => n.id === startId)?.lines.push(line);
-            nodes.find(n => n.id === endId)?.lines.push(line);
+            const conn = { line, sid, eid };
+            connections.push(conn);
             setTimeout(() => {
-                const paths = document.querySelectorAll(".leader-line path");
-                const lastPath = paths[paths.length - 1];
-                if (lastPath) {
-                    lastPath.style.cursor = "pointer"; lastPath.style.pointerEvents = "auto";
-                    lastPath.onclick = (e) => {
-                        e.stopPropagation(); pushUndo();
-                        line.remove();
-                        connections = connections.filter(c => c.line !== line);
-                        nodes.forEach(n => n.lines = n.lines.filter(l => l !== line));
-                        saveToLocal();
-                    };
+                const svgs = document.querySelectorAll('.leader-line');
+                const lastSvg = svgs[svgs.length - 1];
+                if(lastSvg) {
+                    lastSvg.addEventListener('mousedown', (e) => {
+                        if(tool === 'eraser') {
+                            e.stopPropagation(); e.preventDefault();
+                            line.remove();
+                            connections = connections.filter(x => x !== conn);
+                        }
+                    });
                 }
-            }, 50);
-            if (!isRestore) saveToLocal();
+            }, 100);
+        }
+
+        function getCatClass(c) {
+            const m = {'資産・実績': 'cat-assets', '現実・制約': 'cat-reality', '感情・動機': 'cat-emotion', '想定推移': 'cat-projected', '仕組み・手段': 'cat-mechanism', '理想・目的': 'cat-ideal'};
+            return m[c] || 'cat-ideal';
         }
 
         function deselect() {
-            if (selectedNodeId) {
-                const el = document.getElementById(selectedNodeId);
-                if (el) el.classList.remove('selected');
-                selectedNodeId = null;
-                document.getElementById('mainBtn').innerText = "要素を追加";
-                document.getElementById('nodeInput').value = "";
-            }
+            if (selectedId) { document.getElementById(selectedId)?.classList.remove('selected'); selectedId = null; }
+            document.getElementById('nodeInput').value = '';
         }
 
-        function getCatClass(cat) {
-            const m = {'資産・実績': 'cat-assets', '現実・制約': 'cat-reality', '感情・動機': 'cat-emotion', '想定推移': 'cat-projected', '仕組み・手段': 'cat-mechanism', '理想・目的': 'cat-ideal'};
-            return m[cat] || 'cat-ideal';
-        }
-
-        function nDataToText(el) {
-            if (el.getAttribute('data-type') === 'text') return el.innerText;
-            return el.querySelector('.node-box div:last-child')?.innerText || "";
-        }
-
-        function pushUndo() {
-            const state = JSON.stringify(getCurrentState());
-            undoStack.push(state); if (undoStack.length > 30) undoStack.shift();
-        }
-
-        function undo() {
-            if (undoStack.length === 0) return;
-            const prev = JSON.parse(undoStack.pop());
-            connections.forEach(c => c.line.remove());
-            connections = []; nodes.forEach(n => n.el.remove()); nodes = [];
-            prev.nodes.forEach(n => createNode(n, true));
-            prev.leaderLines.forEach(l => connectNodes(l.startId, l.endId, l.type, true));
-            saveToLocal();
-        }
-
-        function getCurrentState() {
-            return {
-                nodes: nodes.map(n => ({ 
-                    id: n.id, type: n.el.getAttribute('data-type'), cat: n.el.getAttribute('data-cat'), 
-                    text: nDataToText(n.el), left: n.el.style.left, top: n.el.style.top, 
-                    width: n.el.style.width, height: n.el.style.height
-                })),
-                leaderLines: connections.map(c => ({ startId: c.startId, endId: c.endId, type: c.type }))
-            };
-        }
-
-        function saveToLocal() { localStorage.setItem('thinkflow_v15_seamless', JSON.stringify(getCurrentState())); }
-        function loadFromLocal() { 
-            const data = JSON.parse(localStorage.getItem('thinkflow_v15_seamless')); 
-            if (data) {
-                data.nodes.forEach(n => createNode(n, true));
-                data.leaderLines.forEach(l => connectNodes(l.startId, l.endId, l.type, true));
-            }
-        }
-        function deleteNode(id) { 
+        function resetView() { panX = 0; panY = 0; scale = 1; updateTransform(); }
+        function deleteNode(id) {
             const n = nodes.find(x => x.id === id); if(!n) return;
-            n.lines.forEach(l => { l.remove(); connections = connections.filter(c => c.line !== l); });
-            n.el.remove(); nodes = nodes.filter(x => x.id !== id); saveToLocal(); 
+            connections.filter(c => c.sid === id || c.eid === id).forEach(c => { c.line.remove(); connections = connections.filter(x => x !== c); });
+            n.el.remove(); nodes = nodes.filter(x => x.id !== id);
+            deselect();
         }
-        function clearAll() { if(confirm("消去しますか？")) { localStorage.clear(); location.reload(); } }
-        async function exportPDF() { 
-            const originalScale = scale; const originalOffsetX = offsetX; const originalOffsetY = offsetY;
-            resetView(); 
-            const c = await html2canvas(container, { scale: 2 }); 
-            const pdf = new jspdf.jsPDF('l', 'mm', 'a4'); 
-            pdf.addImage(c.toDataURL('image/png'), 'PNG', 0, 0, 297, (c.height * 297) / c.width); 
-            pdf.save("thinkflow.pdf");
-            scale = originalScale; offsetX = originalOffsetX; offsetY = originalOffsetY; updateTransform();
-        }
-        function setMode(mode) { currentMode = mode; deselect(); }
+        function clearAll() { if(confirm("消去しますか？")) location.reload(); }
     </script>
 </body>
 </html>
