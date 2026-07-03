@@ -37,14 +37,20 @@
         .cat-ideal { border-color: #10b981; color: #065f46; background-color: #f0fdf4; }
         .cat-owner { border-color: #14b8a6; color: #134e4a; background-color: #f0fdfa; }
 
-        #svgLayer { position: absolute; top: 0; left: 0; width: 10000px; height: 10000px; overflow: visible; }
-        .drawn-line { stroke: #000; stroke-width: 3; fill: none; }
+        /* ペン描画レイヤー */
+        #svgLayer { position: absolute; top: 0; left: 0; width: 10000px; height: 10000px; overflow: visible; pointer-events: none; z-index: 10; }
+        .drawn-line { stroke: #000; stroke-width: 3; fill: none; pointer-events: none; }
+        /* 消しゴムモード時の線の設定 */
+        body.eraser-active .drawn-line { pointer-events: auto !important; cursor: pointer !important; stroke-width: 10px; }
+        body.eraser-active .drawn-line:hover { stroke: #ef4444; }
+        
         .temp-line { stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 5; fill: none; }
 
         .mode-move { cursor: grab !important; }
         .mode-pen { cursor: crosshair !important; }
         .mode-eraser { cursor: cell !important; }
 
+        /* LeaderLine (接続線) の消去設定 */
         body.eraser-active .leader-line { pointer-events: auto !important; z-index: 99999 !important; }
         body.eraser-active .leader-line path { cursor: pointer !important; pointer-events: auto !important; stroke-width: 20px !important; stroke: rgba(239, 68, 68, 0.01) !important; }
         body.eraser-active .leader-line path:nth-child(2) { stroke: rgba(239, 68, 68, 1) !important; stroke-width: 4px !important; }
@@ -100,6 +106,7 @@
             </div>
         </div>
 
+        <!-- pointer-events-auto を追加 -->
         <div class="canvas-container mode-move" id="container" onmousedown="onCanvasDown(event)" oncontextmenu="return false;">
             <div id="viewport">
                 <svg id="svgLayer"></svg>
@@ -119,11 +126,8 @@
 
         window.onload = () => { 
             setTool('move'); 
-            // Escキーで選択解除するイベントリスナー
             window.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    deselect();
-                }
+                if (e.key === 'Escape') deselect();
             });
         };
 
@@ -134,8 +138,12 @@
                 if(btn) btn.className = `px-4 py-1.5 rounded-lg text-xs font-bold transition ${tool===id?'bg-indigo-600 text-white':'text-slate-400'}`;
             });
             container.className = `canvas-container mode-${tool}`;
-            if(tool === 'eraser') document.body.classList.add('eraser-active');
-            else document.body.classList.remove('eraser-active');
+            
+            if(tool === 'eraser') {
+                document.body.classList.add('eraser-active');
+            } else {
+                document.body.classList.remove('eraser-active');
+            }
             connections.forEach(c => c.line.position());
         }
 
@@ -172,7 +180,7 @@
                 const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
                 document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
             } else if (tool === 'pen') {
-                if (e.target !== container && e.target.id !== 'svgLayer') return;
+                // ペンツールのときはSVG要素等に関わらず描画を開始
                 let startX = (e.clientX - rect.left - panX) / scale;
                 let startY = (e.clientY - rect.top - panY) / scale;
                 let temp = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
@@ -188,7 +196,13 @@
                         const l = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
                         l.setAttribute("class", "drawn-line");
                         l.setAttribute("points", temp.getAttribute("points"));
-                        l.onclick = (ev) => { if(tool==='eraser') { ev.stopPropagation(); l.remove(); } };
+                        // 消しゴムモード時のクリックイベント
+                        l.onmousedown = (ev) => { 
+                            if(tool==='eraser') { 
+                                ev.stopPropagation(); 
+                                l.remove(); 
+                            } 
+                        };
                         svgLayer.appendChild(l);
                     }
                     temp.remove();
@@ -247,7 +261,10 @@
 
             el.onclick = (e) => {
                 e.stopPropagation();
-                if (tool === 'eraser') return;
+                if (tool === 'eraser') {
+                    deleteNode(id);
+                    return;
+                };
                 
                 if (!selectedId) {
                     selectedId = id; 
@@ -335,6 +352,7 @@
                 const svgs = document.querySelectorAll('.leader-line');
                 const lastSvg = svgs[svgs.length - 1];
                 if(lastSvg) {
+                    lastSvg.style.pointerEvents = 'auto';
                     lastSvg.addEventListener('mousedown', (e) => {
                         if(tool === 'eraser') {
                             e.stopPropagation(); e.preventDefault();
