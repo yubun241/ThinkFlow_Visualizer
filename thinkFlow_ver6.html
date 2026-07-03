@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThinkFlow Pro - Infinite Canvas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.1.9/leader-line.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { background-color: #f1f5f9; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        .canvas-container { flex: 1; position: relative; overflow: hidden; border-radius: 1.5rem; background: #cbd5e1; margin: 0 24px 24px 24px; }
+        #captureArea {
+            width: 5000px; height: 5000px; /* 広大なキャンバス */
+            background-color: #ffffff; 
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px); 
+            background-size: 20px 20px; 
+            position: absolute; top: 0; left: 0;
+            transform-origin: 0 0;
+            cursor: grab;
+        }
+        #captureArea:active { cursor: grabbing; }
+        .node { position: absolute; cursor: grab; user-select: none; z-index: 20; min-width: 120px; transform-origin: center; }
+        .node:active { cursor: grabbing; }
+        .node.selected { outline: 4px solid #6366f1; outline-offset: 4px; z-index: 50; }
+        .node-box { padding: 14px; border-radius: 12px; border: 2px solid; background: white; width: 100%; height: 100%; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .resizer { width: 14px; height: 14px; background: #6366f1; position: absolute; right: 0; bottom: 0; cursor: se-resize; border-radius: 4px 0 10px 0; opacity: 0; }
+        .node:hover .resizer { opacity: 1; }
+        
+        .cat-assets { border-color: #3b82f6; color: #1e40af; background-color: #eff6ff; }
+        .cat-reality { border-color: #94a3b8; color: #1e293b; background-color: #f8fafc; }
+        .cat-emotion { border-color: #ec4899; color: #9d174d; background-color: #fdf2f8; }
+        .cat-projected { border-color: #f59e0b; color: #92400e; background-color: #fffbeb; }
+        .cat-mechanism { border-color: #6366f1; color: #3730a3; background-color: #eef2ff; }
+        .cat-ideal { border-color: #10b981; color: #065f46; background-color: #f0fdf4; }
+        .node-text-only { border: none; background: transparent; font-weight: 900; font-size: 1.8rem; color: #1e293b; white-space: nowrap; }
+        
+        .line-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .drawn-line { pointer-events: auto; cursor: pointer; stroke: #000000; stroke-width: 2; fill: none; }
+        .drawn-line:hover { stroke: #ef4444; }
+        .temp-line { stroke: #cbd5e1; stroke-width: 1; stroke-dasharray: 5; fill: none; }
+        .leader-line { filter: none !important; }
+    </style>
+</head>
+<body class="p-6">
+    <div class="mx-auto w-full max-w-[1600px]">
+        <header class="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-black italic tracking-tighter uppercase">THINKFLOW <span class="text-indigo-600">PRO</span></h1>
+                <span id="zoomLabel" class="text-xs font-bold text-slate-400">100%</span>
+            </div>
+            <div class="flex gap-2 font-bold uppercase text-[10px]">
+                <button onclick="resetView()" class="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl hover:bg-slate-200">視点リセット</button>
+                <button onclick="undo()" class="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl hover:bg-slate-200">元に戻す</button>
+                <button onclick="exportPDF()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-500">PDF出力</button>
+                <button onclick="downloadData()" class="bg-slate-800 text-white px-4 py-2 rounded-xl">保存</button>
+                <button onclick="importData()" class="bg-slate-500 text-white px-4 py-2 rounded-xl">読込</button>
+                <button onclick="clearAll()" class="bg-red-50 text-red-500 px-4 py-2 rounded-xl hover:bg-red-100">全消去</button>
+            </div>
+        </header>
+    </div>
+
+    <div class="flex flex-1 overflow-hidden gap-6 px-6 pb-6">
+        <div class="w-80 bg-white p-6 rounded-3xl shadow-xl border border-slate-200 space-y-6 overflow-y-auto h-full">
+            <div>
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block text-center">表示モード</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setMode('box')" id="modeBox" class="p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700">枠あり</button>
+                    <button onclick="setMode('text')" id="modeText" class="p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400">枠なし</button>
+                </div>
+            </div>
+            <div id="categorySection">
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">カテゴリー</label>
+                <select id="catSelect" class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm font-bold bg-slate-50">
+                    <option value="資産・実績">資産・実績</option>
+                    <option value="現実・制約">現実・制約</option>
+                    <option value="感情・動機">感情・動機</option>
+                    <option value="想定推移">想定推移</option>
+                    <option value="仕組み・手段">仕組み・手段</option>
+                    <option value="理想・目的">理想・目的</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block font-bold">矢印スタイル</label>
+                <select id="lineTypeSelect" class="w-full border-2 border-slate-200 p-3 rounded-xl text-sm font-bold bg-white outline-none">
+                    <option value="arrow">A ➔ B</option>
+                    <option value="no-arrow">A ― B</option>
+                </select>
+            </div>
+            <textarea id="nodeInput" placeholder="内容を入力..." class="w-full border-2 border-slate-50 p-4 rounded-xl text-sm h-32 outline-none focus:border-indigo-300 bg-slate-50 font-bold"></textarea>
+            <button id="mainBtn" onclick="handleMainBtnClick()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition shadow-lg uppercase tracking-widest italic">要素を追加</button>
+            <div class="bg-indigo-50 p-4 rounded-2xl text-[10px] text-indigo-900 border border-indigo-100 leading-relaxed shadow-sm">
+                <p class="font-black mb-1 text-center italic uppercase tracking-tighter text-xs underline">Canvas Guide</p>
+                <p>● <strong>移動:</strong> 右ドラッグ / キャンバスを掴む</p>
+                <p>● <strong>拡大縮小:</strong> ホイールスクロール</p>
+                <p>● <strong>接続:</strong> 要素を2つ順にクリック</p>
+                <p>● <strong>消去:</strong> 線をクリック / 要素を右クリック</p>
+            </div>
+        </div>
+
+        <div class="canvas-container" id="container">
+            <div id="captureArea" onmousedown="startDrawingOrPan(event)" oncontextmenu="return false;">
+                <svg id="svgArea" class="line-svg"></svg>
+                <div id="canvasInner" class="w-full h-full relative pointer-events-none"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'box', nodes = [], connections = [], selectedNodeId = null, undoStack = [];
+        let scale = 1, offsetX = 0, offsetY = 0;
+        const container = document.getElementById('container');
+        const captureArea = document.getElementById('captureArea');
+        const svgArea = document.getElementById('svgArea');
+
+        window.onload = () => { loadFromLocal(); resetView(); };
+        window.onkeydown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+            if (e.key === 'Escape') { deselect(); }
+        };
+
+        // ズーム機能
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = Math.min(Math.max(scale * delta, 0.2), 3);
+            
+            const rect = container.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+            offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+            
+            scale = newScale;
+            updateTransform();
+        }, { passive: false });
+
+        function updateTransform() {
+            captureArea.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+            document.getElementById('zoomLabel').innerText = Math.round(scale * 100) + "%";
+            // ズーム移動時にLeaderLineを再描画
+            connections.forEach(c => c.line.position());
+        }
+
+        function resetView() {
+            scale = 1; offsetX = 0; offsetY = 0;
+            updateTransform();
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('modeBox').className = mode === 'box' ? 'p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
+            document.getElementById('modeText').className = mode === 'text' ? 'p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
+            document.getElementById('categorySection').style.display = mode === 'box' ? 'block' : 'none';
+        }
+
+        function deselect() {
+            if (selectedNodeId) {
+                const el = document.getElementById(selectedNodeId);
+                if (el) el.classList.remove('selected');
+                selectedNodeId = null;
+                document.getElementById('mainBtn').innerText = "要素を追加";
+                document.getElementById('nodeInput').value = "";
+            }
+        }
+
+        function handleMainBtnClick() {
+            if (selectedNodeId) updateNode(selectedNodeId);
+            else createNode();
+        }
+
+        function createNode(data = null, isUndo = false) {
+            const inputValue = data ? data.text : document.getElementById('nodeInput').value;
+            if (!inputValue.trim()) return;
+            if (!isUndo && !data) pushUndo();
+
+            const nodeEl = document.createElement('div');
+            const id = data ? data.id : "node_" + Date.now();
+            nodeEl.id = id;
+            nodeEl.className = 'node pointer-events-auto';
+            const type = data ? data.type : currentMode;
+            applyNodeStyle(nodeEl, type, inputValue, data?.cat);
+
+            // 初期位置（ズーム状態を考慮）
+            nodeEl.style.left = data ? data.left : (Math.abs(offsetX)/scale + 100) + "px";
+            nodeEl.style.top = data ? data.top : (Math.abs(offsetY)/scale + 100) + "px";
+            if(data?.width) nodeEl.style.width = data.width;
+            if(data?.height) nodeEl.style.height = data.height;
+
+            nodeEl.onmousedown = (e) => {
+                if(e.target.className === 'resizer' || e.button !== 0) return;
+                e.stopPropagation();
+                let sx = e.clientX, sy = e.clientY;
+                let originalLeft = parseFloat(nodeEl.style.left);
+                let originalTop = parseFloat(nodeEl.style.top);
+
+                document.onmousemove = (me) => {
+                    nodeEl.style.left = (originalLeft + (me.clientX - sx) / scale) + 'px';
+                    nodeEl.style.top = (originalTop + (me.clientY - sy) / scale) + 'px';
+                    nodes.find(n => n.id === id)?.lines.forEach(l => l.position());
+                };
+                document.onmouseup = () => { document.onmousemove = null; saveToLocal(); };
+            };
+            
+            nodeEl.onclick = (e) => {
+                e.stopPropagation();
+                if (!selectedNodeId) {
+                    selectedNodeId = id; 
+                    nodeEl.classList.add('selected');
+                    document.getElementById('nodeInput').value = nDataToText(nodeEl);
+                    document.getElementById('mainBtn').innerText = "要素を変更";
+                    if(nodeEl.getAttribute('data-cat')) document.getElementById('catSelect').value = nodeEl.getAttribute('data-cat');
+                } else if (selectedNodeId === id) {
+                    deselect();
+                } else {
+                    pushUndo();
+                    connectNodes(selectedNodeId, id, document.getElementById('lineTypeSelect').value);
+                    deselect();
+                }
+            };
+
+            nodeEl.oncontextmenu = (e) => { e.preventDefault(); pushUndo(); deleteNode(id); };
+            document.getElementById('canvasInner').appendChild(nodeEl);
+            nodes.push({ id, el: nodeEl, lines: [] });
+            if (!data) { document.getElementById('nodeInput').value = ''; saveToLocal(); }
+        }
+
+        function applyNodeStyle(el, type, text, cat) {
+            el.innerHTML = ''; el.setAttribute('data-type', type);
+            if (type === 'text') {
+                el.className = 'node pointer-events-auto node-text-only';
+                el.innerHTML = text.replace(/\n/g, '<br>');
+            } else {
+                const category = cat || document.getElementById('catSelect').value;
+                el.className = 'node pointer-events-auto'; el.setAttribute('data-cat', category);
+                const inner = document.createElement('div');
+                inner.className = `node-box ${getCatClass(category)}`;
+                inner.innerHTML = `<div class="text-[8px] opacity-50 font-black mb-1 uppercase tracking-tighter">${category}</div><div class="text-sm font-bold leading-tight">${text.replace(/\n/g, '<br>')}</div>`;
+                el.appendChild(inner);
+                const resizer = document.createElement('div');
+                resizer.className = 'resizer'; el.appendChild(resizer);
+                initResize(el, resizer);
+            }
+        }
+
+        function initResize(node, resizer) {
+            resizer.onmousedown = (e) => {
+                e.stopPropagation(); e.preventDefault();
+                let sw = node.offsetWidth, sh = node.offsetHeight, sx = e.clientX, sy = e.clientY;
+                document.onmousemove = (me) => {
+                    node.style.width = (sw + (me.clientX - sx) / scale) + 'px';
+                    node.style.height = (sh + (me.clientY - sy) / scale) + 'px';
+                    nodes.find(n => n.id === node.id)?.lines.forEach(l => l.position());
+                };
+                document.onmouseup = () => { document.onmousemove = null; saveToLocal(); };
+            }
+        }
+
+        function connectNodes(startId, endId, type, isRestore = false) {
+            const startEl = document.getElementById(startId);
+            const endEl = document.getElementById(endId);
+            if (!startEl || !endEl) return;
+
+            const line = new LeaderLine(startEl, endEl, {
+                color: "#000000", size: 2, path: "fluid",
+                startSocket: "auto", endSocket: "auto",
+                endPlug: type === "arrow" ? "arrow" : "behind", outline: false
+            });
+
+            connections.push({ line, startId, endId, type });
+            nodes.find(n => n.id === startId)?.lines.push(line);
+            nodes.find(n => n.id === endId)?.lines.push(line);
+
+            setTimeout(() => {
+                const paths = document.querySelectorAll(".leader-line path");
+                const lastPath = paths[paths.length - 1];
+                if (lastPath) {
+                    lastPath.style.cursor = "pointer";
+                    lastPath.style.pointerEvents = "auto";
+                    lastPath.onclick = (e) => {
+                        e.stopPropagation(); pushUndo();
+                        line.remove();
+                        connections = connections.filter(c => c.line !== line);
+                        nodes.forEach(n => n.lines = n.lines.filter(l => l !== line));
+                        saveToLocal();
+                    };
+                }
+            }, 50);
+            if (!isRestore) saveToLocal();
+        }
+
+        function startDrawingOrPan(e) {
+            if (e.button === 2 || (e.button === 0 && e.ctrlKey)) {
+                // パン（画面移動）
+                let sx = e.clientX, sy = e.clientY;
+                let ox = offsetX, oy = offsetY;
+                document.onmousemove = (me) => {
+                    offsetX = ox + (me.clientX - sx);
+                    offsetY = oy + (me.clientY - sy);
+                    updateTransform();
+                };
+                document.onmouseup = () => document.onmousemove = null;
+                return;
+            }
+            if (e.target.id !== 'captureArea' && e.target.id !== 'svgArea') return;
+            // 自由線描画（ズーム対応）
+            const rect = captureArea.getBoundingClientRect();
+            let startX = (e.clientX - rect.left) / scale;
+            let startY = (e.clientY - rect.top) / scale;
+            let tempLine = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+            tempLine.setAttribute("class", "temp-line");
+            svgArea.appendChild(tempLine);
+            document.onmousemove = (me) => {
+                let cx = (me.clientX - rect.left) / scale;
+                let cy = (me.clientY - rect.top) / scale;
+                let pts = Math.abs(cx - startX) > Math.abs(cy - startY) ? `${startX},${startY} ${cx},${startY}` : `${startX},${startY} ${startX},${cy}`;
+                tempLine.setAttribute("points", pts);
+            };
+            document.onmouseup = () => {
+                if (tempLine.getAttribute("points")) {
+                    pushUndo();
+                    const l = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+                    l.setAttribute("class", "drawn-line");
+                    l.setAttribute("points", tempLine.getAttribute("points"));
+                    l.onclick = (ev) => { ev.stopPropagation(); pushUndo(); l.remove(); saveToLocal(); };
+                    svgArea.appendChild(l);
+                }
+                tempLine.remove(); document.onmousemove = null; saveToLocal();
+            };
+        }
+
+        function getCatClass(cat) {
+            const m = {'資産・実績': 'cat-assets', '現実・制約': 'cat-reality', '感情・動機': 'cat-emotion', '想定推移': 'cat-projected', '仕組み・手段': 'cat-mechanism', '理想・目的': 'cat-ideal'};
+            return m[cat] || 'cat-ideal';
+        }
+
+        function nDataToText(el) {
+            if (el.getAttribute('data-type') === 'text') return el.innerText;
+            return el.querySelector('.node-box div:last-child')?.innerText || "";
+        }
+
+        function pushUndo() {
+            const state = JSON.stringify(getCurrentState());
+            if (undoStack.length === 0 || undoStack[undoStack.length - 1] !== state) {
+                undoStack.push(state);
+                if (undoStack.length > 30) undoStack.shift();
+            }
+        }
+
+        function undo() {
+            if (undoStack.length === 0) return;
+            const prev = JSON.parse(undoStack.pop());
+            clearCanvasOnly();
+            applyState(prev);
+            saveToLocal();
+        }
+
+        function getCurrentState() {
+            const nData = nodes.map(n => ({ 
+                id: n.id, type: n.el.getAttribute('data-type'), cat: n.el.getAttribute('data-cat'), 
+                text: nDataToText(n.el),
+                left: n.el.style.left, top: n.el.style.top, width: n.el.style.width, height: n.el.style.height
+            }));
+            const lData = connections.map(c => ({ startId: c.startId, endId: c.endId, type: c.type }));
+            const fData = Array.from(document.querySelectorAll('.drawn-line')).map(el => el.getAttribute('points'));
+            return { nodes: nData, leaderLines: lData, freeLines: fData };
+        }
+
+        function applyState(state) {
+            state.nodes.forEach(n => createNode(n, true));
+            state.leaderLines.forEach(l => connectNodes(l.startId, l.endId, l.type, true));
+            if(state.freeLines) state.freeLines.forEach(p => {
+                const l = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+                l.setAttribute("class", "drawn-line"); l.setAttribute("points", p);
+                l.onclick = (ev) => { ev.stopPropagation(); pushUndo(); l.remove(); saveToLocal(); };
+                svgArea.appendChild(l);
+            });
+        }
+
+        function clearCanvasOnly() {
+            connections.forEach(c => c.line.remove());
+            connections = []; nodes.forEach(n => n.el.remove()); nodes = [];
+            Array.from(document.querySelectorAll('.drawn-line')).forEach(l => l.remove());
+            deselect();
+        }
+
+        function saveToLocal() { localStorage.setItem('thinkflow_v14_infinite', JSON.stringify(getCurrentState())); }
+        function loadFromLocal() { const data = JSON.parse(localStorage.getItem('thinkflow_v14_infinite')); if (data) applyState(data); }
+        function deleteNode(id) { const n = nodes.find(x => x.id === id); if(!n) return; n.lines.forEach(l => { l.remove(); connections = connections.filter(c => c.line !== l); }); n.el.remove(); nodes = nodes.filter(x => x.id !== id); saveToLocal(); }
+        function clearAll() { if(confirm("データを完全にリセットしますか？")) { localStorage.clear(); location.reload(); } }
+        function downloadData() { const b = new Blob([localStorage.getItem('thinkflow_v14_infinite')], {type:'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'thinkflow_canvas.txt'; a.click(); }
+        function importData() { const i = document.createElement('input'); i.type = 'file'; i.onchange = (e) => { const r = new FileReader(); r.onload = (re) => { localStorage.setItem('thinkflow_v14_infinite', re.target.result); location.reload(); }; r.readAsText(e.target.files[0]); }; i.click(); }
+        async function exportPDF() { 
+            const originalScale = scale; const originalOffsetX = offsetX; const originalOffsetY = offsetY;
+            resetView(); // PDF出力のために一旦リセット
+            const c = await html2canvas(container, { scale: 2 }); 
+            const pdf = new jspdf.jsPDF('l', 'mm', 'a4'); 
+            pdf.addImage(c.toDataURL('image/png'), 'PNG', 0, 0, 297, (c.height * 297) / c.width); 
+            pdf.save("thinkflow_canvas.pdf");
+            scale = originalScale; offsetX = originalOffsetX; offsetY = originalOffsetY; updateTransform();
+        }
+    </script>
+</body>
+</html>
