@@ -59,7 +59,7 @@
         #svgLayer { position: absolute; top: -5000px; left: -5000px; width: 10000px; height: 10000px; overflow: visible; pointer-events: none; z-index: 10; }
         .conn-visible { stroke: #475569; stroke-width: 2; fill: none; }
         .stroke-visible { stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-        .rect-visible { stroke: #334155; stroke-width: 2; fill: none; }
+        .rect-visible { stroke-width: 2; fill: none; }
         .hit-line { stroke: transparent; stroke-width: 16; fill: none; pointer-events: stroke; cursor: pointer; }
         g.line-sel .conn-visible, g.line-sel .stroke-visible, g.line-sel .rect-visible { stroke: #6366f1 !important; stroke-width: 3; }
         .temp-connect { stroke: #10b981; stroke-width: 2; stroke-dasharray: 6 4; fill: none; }
@@ -617,11 +617,11 @@
                 const vis = g.querySelector('.rect-visible');
                 if (s.dash === false) vis.removeAttribute('stroke-dasharray');
                 else vis.setAttribute('stroke-dasharray', '8 6');
-                vis.setAttribute('stroke', s.color || '#334155');
+                vis.style.stroke = s.color || '#334155';
             } else {
                 const pts = (s.kind === 'line' ? [[s.x1, s.y1], [s.x2, s.y2]] : s.points).map(p => `${p[0] + O},${p[1] + O}`).join(' ');
                 g.querySelectorAll('polyline').forEach(p => p.setAttribute('points', pts));
-                g.querySelector('.stroke-visible').setAttribute('stroke', s.color || '#334155');
+                g.querySelector('.stroke-visible').style.stroke = s.color || '#334155';
             }
         }
         function deleteShape(id, record = true) {
@@ -641,7 +641,9 @@
         function setStrokeColor(color) {
             if (selected?.kind !== 'shape') return;
             const s = shapes.find(x => x.id === selected.id); if (!s) return;
-            if (s.color !== color) { pushHistory('shapeProp', { id: s.id, from: { color: s.color }, to: { color } }); s.color = color; renderShape(s); }
+            const prev = s.color || '#334155';
+            if (prev !== color) pushHistory('shapeProp', { id: s.id, from: { color: prev }, to: { color } });
+            s.color = color; renderShape(s);
             updateStyleButtons('color', color);
         }
         function updateStyleButtons(group, val) {
