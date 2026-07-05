@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThinkFlow Pro v8</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { background-color: #f1f5f9; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        .canvas-container {
+            flex: 1; position: relative; overflow: hidden;
+            border-radius: 1.5rem;
+            background-color: #ffffff;
+            background-image: radial-gradient(#cbd5e1 1.5px, transparent 1.5px);
+            background-size: 30px 30px;
+            touch-action: none;
+        }
+        #viewport { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; pointer-events: none; --inv: 1; }
+        .node { position: absolute; cursor: grab; user-select: none; z-index: 20; min-width: 50px; pointer-events: auto; }
+        .node:active { cursor: grabbing; }
+        .node.selected .node-box { border-color: #6366f1 !important; }
+        .node-box { padding: 14px; border-radius: 12px; border: 2px solid; background: white; width: 100%; height: 100%; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); overflow: hidden; }
+        .node-text-only { border: none; background: transparent; font-weight: 900; font-size: 1.5rem; color: #1e293b; white-space: nowrap; box-shadow: none; }
+        .node-text-only .cat-label { font-size: 0.6rem; text-transform: uppercase; opacity: 0.5; display: block; margin-bottom: -4px; }
+        .node.selected.node-text-only, .node.selected .node-image-inner { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 8px; }
+        .node-image img { width: 100%; height: 100%; object-fit: contain; display: block; border-radius: 8px; pointer-events: none; }
+
+        /* --- 選択ハンドル（8点） --- */
+        .handle {
+            position: absolute; width: 11px; height: 11px; background: #fff;
+            border: 2px solid #6366f1; border-radius: 50%; z-index: 60;
+            transform: translate(-50%, -50%) scale(var(--inv));
+        }
+        .h-nw { left: 0; top: 0; cursor: nwse-resize; }
+        .h-n  { left: 50%; top: 0; cursor: ns-resize; }
+        .h-ne { left: 100%; top: 0; cursor: nesw-resize; }
+        .h-e  { left: 100%; top: 50%; cursor: ew-resize; }
+        .h-se { left: 100%; top: 100%; cursor: nwse-resize; }
+        .h-s  { left: 50%; top: 100%; cursor: ns-resize; }
+        .h-sw { left: 0; top: 100%; cursor: nesw-resize; }
+        .h-w  { left: 0; top: 50%; cursor: ew-resize; }
+
+        /* --- 接続ポート --- */
+        .port {
+            position: absolute; width: 13px; height: 13px; background: #6366f1;
+            border: 2px solid #fff; border-radius: 50%; z-index: 65;
+            transform: translate(-50%, -50%) scale(var(--inv));
+            cursor: crosshair; opacity: 0; transition: opacity .12s;
+            box-shadow: 0 1px 3px rgb(0 0 0 / .25);
+        }
+        .node:hover .port, .node.selected .port { opacity: 1; }
+        .p-t { left: 50%; top: 0; } .p-r { left: 100%; top: 50%; }
+        .p-b { left: 50%; top: 100%; } .p-l { left: 0; top: 50%; }
+        body.connecting .node:hover .node-box { border-color: #10b981 !important; }
+
+        /* --- SVGレイヤー（矢印・図形） --- */
+        #svgLayer { position: absolute; top: -5000px; left: -5000px; width: 10000px; height: 10000px; overflow: visible; pointer-events: none; z-index: 10; }
+        .conn-visible { stroke: #475569; stroke-width: 2; fill: none; }
+        .stroke-visible { stroke: #334155; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+        .rect-visible { stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 8 6; fill: none; }
+        .hit-line { stroke: transparent; stroke-width: 16; fill: none; pointer-events: stroke; cursor: pointer; }
+        g.line-sel .conn-visible, g.line-sel .stroke-visible, g.line-sel .rect-visible { stroke: #6366f1; stroke-width: 3; }
+        .temp-connect { stroke: #10b981; stroke-width: 2; stroke-dasharray: 6 4; fill: none; }
+        .temp-shape { stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 6 4; fill: none; }
+
+        /* --- フローティングツールバー --- */
+        .float-bar {
+            position: absolute; z-index: 200; display: flex; align-items: center; gap: 2px;
+            background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+            box-shadow: 0 8px 20px -6px rgb(0 0 0 / .2); padding: 4px;
+        }
+        .float-bar button { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #475569; font-weight: 900; font-size: 14px; }
+        .float-bar button:hover { background: #f1f5f9; }
+        .float-bar button.danger { color: #ef4444; }
+        .float-bar button.danger:hover { background: #fef2f2; }
+        .float-bar button.style-on { background: #eef2ff; color: #6366f1; }
+        .float-bar select { font-size: 11px; font-weight: 700; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 4px; max-width: 110px; background: #f8fafc; outline: none; color: #475569; }
+        .float-bar .sep { width: 1px; height: 20px; background: #e2e8f0; margin: 0 3px; }
+
+        .mode-draw { cursor: crosshair !important; }
+        [contenteditable="true"] { outline: none; cursor: text; user-select: text; }
+        .node.editing { cursor: text; }
+
+        /* カラー設定 */
+        .cat-assets { border-color: #3b82f6; color: #1e40af; background-color: #eff6ff; }
+        .cat-reality { border-color: #94a3b8; color: #1e293b; background-color: #f8fafc; }
+        .cat-emotion { border-color: #ec4899; color: #9d174d; background-color: #fdf2f8; }
+        .cat-mechanism { border-color: #6366f1; color: #3730a3; background-color: #eef2ff; }
+        .cat-ideal { border-color: #10b981; color: #065f46; background-color: #f0fdf4; }
+        .cat-owner { border-color: #14b8a6; color: #134e4a; background-color: #f0fdfa; }
+        .cat-why { border-color: #ef4444; color: #b91c1c; background-color: #fef2f2; }
+        .cat-who { border-color: #3b82f6; color: #1d4ed8; background-color: #eff6ff; }
+        .cat-what { border-color: #10b981; color: #047857; background-color: #f0fdf4; }
+        .cat-where { border-color: #8b5cf6; color: #6d28d9; background-color: #f5f3ff; }
+        .cat-when { border-color: #f59e0b; color: #b45309; background-color: #fffbeb; }
+        .cat-how { border-color: #06b6d4; color: #0e7490; background-color: #ecfeff; }
+        .cat-howmuch { border-color: #f43f5e; color: #be123c; background-color: #fff1f2; }
+        .cat-memo { border-color: #64748b; color: #1e293b; background-color: #ffffff; }
+    </style>
+</head>
+<body class="p-6">
+    <div class="mx-auto w-full max-w-[1600px]">
+        <header class="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-black italic tracking-tighter uppercase text-slate-800">THINKFLOW <span class="text-indigo-600">PRO</span></h1>
+                <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1">
+                    <button id="btn-pen" onclick="setDrawTool('pen')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400">✎ ペン</button>
+                    <button id="btn-line" onclick="setDrawTool('line')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400">╱ 直線</button>
+                    <button id="btn-rect" onclick="setDrawTool('rect')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400">▢ 囲み</button>
+                </div>
+            </div>
+            <div class="flex gap-2 font-bold text-[10px] items-center">
+                <button onclick="undo()" class="bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700">元に戻す (Ctrl+Z)</button>
+                <button onclick="resetView()" class="bg-slate-100 px-4 py-2 rounded-xl">視点リセット</button>
+                <button onclick="clearAll()" class="bg-red-50 text-red-500 px-4 py-2 rounded-xl">全消去</button>
+                <button onclick="openExport()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-500 shadow-md">⚡ AI連携出力</button>
+            </div>
+        </header>
+    </div>
+
+    <div class="flex flex-1 overflow-hidden gap-6 px-6 pb-6">
+        <div class="w-80 bg-white p-6 rounded-3xl shadow-xl border border-slate-200 space-y-5 h-full overflow-y-auto shrink-0">
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="setDisplayMode('box')" id="modeBox" class="p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700">枠あり</button>
+                <button onclick="setDisplayMode('text')" id="modeText" class="p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400">枠なし</button>
+            </div>
+            <div class="space-y-3">
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block">要素の追加</label>
+                <select id="catSelect" class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm font-bold bg-slate-50 outline-none">
+                    <optgroup label="基本カテゴリー">
+                        <option value="資産・実績" data-class="cat-assets">資産・実績</option>
+                        <option value="現実・制約" data-class="cat-reality">現実・制約</option>
+                        <option value="感情・動機" data-class="cat-emotion">感情・動機</option>
+                        <option value="仕組み・手段" data-class="cat-mechanism">仕組み・手段</option>
+                        <option value="理想・目的" data-class="cat-ideal">理想・目的</option>
+                        <option value="担当者" data-class="cat-owner">担当者</option>
+                    </optgroup>
+                    <optgroup label="5W2H">
+                        <option value="WHY" data-class="cat-why">WHY</option>
+                        <option value="HOW" data-class="cat-how">HOW</option>
+                        <option value="WHAT" data-class="cat-what">WHAT</option>
+                        <option value="WHERE" data-class="cat-where">WHERE</option>
+                        <option value="WHEN" data-class="cat-when">WHEN</option>
+                        <option value="WHO" data-class="cat-who">WHO</option>
+                        <option value="HOW MUCH" data-class="cat-howmuch">HOW MUCH</option>
+                    </optgroup>
+                    <optgroup label="その他">
+                        <option value="MEMO" data-class="cat-memo">MEMO</option>
+                    </optgroup>
+                </select>
+                <textarea id="nodeInput" placeholder="内容を入力... (Ctrl+Enterで追加)" class="w-full border-2 border-slate-50 p-3 rounded-xl text-sm h-28 outline-none font-bold"></textarea>
+                <button onclick="createFromSidebar()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black italic uppercase shadow-md active:scale-95 transition">要素を追加</button>
+            </div>
+            <div class="pt-4 border-t border-slate-100">
+                <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                <button onclick="document.getElementById('imageInput').click()" class="w-full bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold text-xs border border-indigo-100 hover:bg-indigo-100 transition">画像を選択</button>
+            </div>
+            <div class="pt-4 border-t border-slate-100 text-[10px] text-slate-400 leading-relaxed font-bold space-y-1">
+                <p class="text-slate-500 font-black uppercase tracking-widest text-[9px]">操作ガイド</p>
+                <p>・要素クリック → 選択（ハンドルでリサイズ）</p>
+                <p>・ダブルクリック → その場で編集</p>
+                <p>・縁の●をドラッグ → 矢印で接続</p>
+                <p>・矢印クリック → 「→ / — / ⇔」を切替</p>
+                <p>・線／図形クリック → 選択 → Deleteで削除</p>
+                <p>・▢囲みで要素を囲むとAI出力でグループ化</p>
+                <p>・キャンバスドラッグ → 移動／ホイール → ズーム</p>
+            </div>
+        </div>
+
+        <div class="canvas-container" id="container" oncontextmenu="return false;">
+            <div id="viewport">
+                <svg id="svgLayer">
+                    <defs>
+                        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+                        </marker>
+                        <marker id="arrowSel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#6366f1"/>
+                        </marker>
+                    </defs>
+                    <g id="connLayer"></g>
+                    <g id="shapeLayer"></g>
+                    <path id="tempConnect" class="temp-connect" style="display:none"/>
+                </svg>
+                <div id="nodeLayer"></div>
+            </div>
+            <!-- 要素用フローティングツールバー -->
+            <div id="nodeBar" class="float-bar" style="display:none">
+                <button title="複製 (Ctrl+D)" onclick="duplicateSelected()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                </button>
+                <button title="編集" onclick="startEditSelected()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                </button>
+                <div class="sep"></div>
+                <select id="barCat" title="カテゴリ変更" onchange="changeCategory(this)"></select>
+                <div class="sep"></div>
+                <button class="danger" title="削除 (Delete)" onclick="deleteSelected()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                </button>
+            </div>
+            <!-- 線・図形用フローティングツールバー -->
+            <div id="lineBar" class="float-bar" style="display:none">
+                <button id="ls-arrow" title="片矢印" onclick="setConnStyle('arrow')">→</button>
+                <button id="ls-none" title="矢印なし" onclick="setConnStyle('none')">—</button>
+                <button id="ls-both" title="両矢印" onclick="setConnStyle('both')">⇔</button>
+                <div class="sep" id="ls-sep"></div>
+                <button class="danger" title="削除 (Delete)" onclick="deleteSelected()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI連携出力モーダル -->
+    <div id="exportModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[500] items-center justify-center" style="display:none">
+        <div class="bg-white rounded-3xl shadow-2xl w-[720px] max-w-[92vw] max-h-[85vh] flex flex-col p-6 gap-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-black italic uppercase text-slate-800">AI連携出力 <span class="text-indigo-600 text-xs">構造の言語化</span></h2>
+                <button onclick="closeExport()" class="text-slate-400 hover:text-slate-700 font-black px-2">✕</button>
+            </div>
+            <p class="text-[11px] font-bold text-slate-400">要素・矢印・囲みグループを言語化しました。コピーして要約用のAIに渡してください。スクリーンショットも併せて添付すると精度が上がります。</p>
+            <textarea id="exportText" readonly class="flex-1 min-h-[320px] w-full border-2 border-slate-100 rounded-2xl p-4 text-xs font-mono leading-relaxed bg-slate-50 outline-none resize-none"></textarea>
+            <div class="flex gap-2">
+                <button onclick="copyExport(this)" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black text-xs uppercase hover:bg-indigo-500">テキストをコピー</button>
+                <button onclick="savePng(this)" class="flex-1 bg-slate-900 text-white py-3 rounded-xl font-black text-xs uppercase hover:bg-slate-700">表示範囲をPNG保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== 状態 =====
+        let nodes = [];        // {id, type:'box'|'image', text, cat, customClass, displayMode, x, y, w, h, src}
+        let connections = [];  // {id, sid, eid, style:'arrow'|'none'|'both'}
+        let shapes = [];       // {id, kind:'free', points} | {id, kind:'line', x1,y1,x2,y2} | {id, kind:'rect', x,y,w,h}
+        let history = [];
+        let selected = null;   // {kind:'node'|'conn'|'shape', id}
+        let drawTool = null;   // null | 'pen' | 'line' | 'rect'
+        let nodeDisplayMode = 'box';
+        let scale = 1, panX = 0, panY = 0;
+        const SVG_OFF = 5000; // svgLayer は -5000px オフセット配置
+        const container = document.getElementById('container');
+        const viewport = document.getElementById('viewport');
+        const nodeLayer = document.getElementById('nodeLayer');
+        const connLayer = document.getElementById('connLayer');
+        const shapeLayer = document.getElementById('shapeLayer');
+        const nodeBar = document.getElementById('nodeBar');
+        const lineBar = document.getElementById('lineBar');
+        let uid = 0;
+        const newId = p => p + (Date.now().toString(36)) + (uid++);
+        const O = SVG_OFF;
+
+        // ===== 座標変換 =====
+        const toWorld = (cx, cy) => {
+            const r = container.getBoundingClientRect();
+            return [(cx - r.left - panX) / scale, (cy - r.top - panY) / scale];
+        };
+        const toScreen = (wx, wy) => [panX + wx * scale, panY + wy * scale];
+
+        function updateTransform() {
+            container.style.backgroundPosition = `${panX}px ${panY}px`;
+            container.style.backgroundSize = `${30 * scale}px ${30 * scale}px`;
+            viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+            viewport.style.setProperty('--inv', 1 / scale);
+            positionBars();
+        }
+
+        // ===== 履歴 =====
+        function pushHistory(action, data) { history.push({ action, data }); if (history.length > 100) history.shift(); }
+        function undo() {
+            const last = history.pop(); if (!last) return;
+            const d = last.data;
+            switch (last.action) {
+                case 'addNode': removeNodeSilent(d.node.id); break;
+                case 'delNode': restoreNode(d.node, d.conns); break;
+                case 'addConn': removeConnSilent(d.conn.id); break;
+                case 'delConn': connections.push(d.conn); renderConn(d.conn); break;
+                case 'connStyle': { const c = connections.find(x => x.id === d.id); if (c) { c.style = d.from; renderConn(c); } break; }
+                case 'addShape': removeShapeSilent(d.shape.id); break;
+                case 'delShape': shapes.push(d.shape); renderShape(d.shape); break;
+                case 'move': { const n = findNode(d.id); if (n) { n.x = d.from.x; n.y = d.from.y; syncNodeEl(n); } break; }
+                case 'resize': { const n = findNode(d.id); if (n) { Object.assign(n, d.from); syncNodeEl(n); } break; }
+                case 'edit': { const n = findNode(d.id); if (n) { n.text = d.from; refreshNodeContent(n); } break; }
+                case 'cat': { const n = findNode(d.id); if (n) { n.cat = d.from.cat; n.customClass = d.from.customClass; refreshNodeContent(n); } break; }
+            }
+            deselect(); redrawAllConns();
+        }
+
+        const findNode = id => nodes.find(n => n.id === id);
+
+        // ===== ノード生成・描画 =====
+        function createFromSidebar() {
+            const sel = document.getElementById('catSelect');
+            const text = document.getElementById('nodeInput').value.trim();
+            if (!text) return;
+            const [cx, cy] = centerWorld();
+            addNode({ id: newId('n'), type: 'box', text, cat: sel.value, customClass: sel.options[sel.selectedIndex].dataset.class, displayMode: nodeDisplayMode, x: cx - 90, y: cy - 40, w: null, h: null });
+            document.getElementById('nodeInput').value = '';
+        }
+        function centerWorld() {
+            const r = container.getBoundingClientRect();
+            return toWorld(r.left + r.width / 2, r.top + r.height / 2);
+        }
+        function addNode(n, record = true) {
+            nodes.push(n); renderNode(n);
+            if (record) pushHistory('addNode', { node: n });
+        }
+        function restoreNode(n, conns) {
+            nodes.push(n); renderNode(n);
+            (conns || []).forEach(c => { connections.push(c); renderConn(c); });
+        }
+
+        function renderNode(n) {
+            let el = document.getElementById(n.id);
+            if (!el) { el = document.createElement('div'); el.id = n.id; nodeLayer.appendChild(el); }
+            el.innerHTML = '';
+            if (n.type === 'image') {
+                el.className = 'node node-image';
+                const inner = document.createElement('div');
+                inner.className = 'node-image-inner w-full h-full';
+                inner.innerHTML = `<img src="${n.src}">`;
+                el.appendChild(inner);
+                if (!n.w) n.w = 200;
+            } else if (n.displayMode === 'text') {
+                el.className = 'node node-text-only';
+                el.innerHTML = `<span class="cat-label">${esc(n.cat)}</span><span class="node-text">${esc(n.text).replace(/\n/g, '<br>')}</span>`;
+            } else {
+                el.className = 'node';
+                const inner = document.createElement('div');
+                inner.className = `node-box ${n.customClass}`;
+                inner.innerHTML = `<div class="text-[8px] font-black uppercase mb-1 opacity-60">${esc(n.cat)}</div><div class="node-text text-sm font-bold leading-tight">${esc(n.text).replace(/\n/g, '<br>')}</div>`;
+                el.appendChild(inner);
+            }
+            ['t', 'r', 'b', 'l'].forEach(s => {
+                const p = document.createElement('div');
+                p.className = `port p-${s}`;
+                p.addEventListener('pointerdown', e => startConnect(e, n.id));
+                el.appendChild(p);
+            });
+            syncNodeEl(n);
+            el.onpointerdown = e => onNodeDown(e, n.id);
+            el.ondblclick = e => { e.stopPropagation(); startEdit(n.id); };
+        }
+        function refreshNodeContent(n) { renderNode(n); if (selected?.kind === 'node' && selected.id === n.id) { document.getElementById(n.id).classList.add('selected'); attachHandles(n.id); } positionBars(); }
+        function syncNodeEl(n) {
+            const el = document.getElementById(n.id); if (!el) return;
+            el.style.left = n.x + 'px'; el.style.top = n.y + 'px';
+            el.style.width = n.w ? n.w + 'px' : ''; el.style.height = n.h ? n.h + 'px' : '';
+            if (n.w && n.displayMode === 'text') el.style.whiteSpace = 'normal';
+        }
+        const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // ===== ノード操作（ドラッグ移動・選択） =====
+        function onNodeDown(e, id) {
+            if (e.target.classList.contains('port') || e.target.classList.contains('handle')) return;
+            const el = document.getElementById(id);
+            if (el.classList.contains('editing')) return;
+            e.stopPropagation();
+            const n = findNode(id);
+            const sx = e.clientX, sy = e.clientY, ox = n.x, oy = n.y;
+            let moved = false;
+            el.setPointerCapture(e.pointerId);
+            const mm = me => {
+                const dx = (me.clientX - sx) / scale, dy = (me.clientY - sy) / scale;
+                if (!moved && Math.hypot(dx, dy) > 2) moved = true;
+                if (moved) { n.x = ox + dx; n.y = oy + dy; syncNodeEl(n); redrawConnsFor(id); positionBars(); }
+            };
+            const mu = () => {
+                el.removeEventListener('pointermove', mm); el.removeEventListener('pointerup', mu);
+                if (moved) pushHistory('move', { id, from: { x: ox, y: oy }, to: { x: n.x, y: n.y } });
+                else selectNode(id);
+            };
+            el.addEventListener('pointermove', mm); el.addEventListener('pointerup', mu);
+        }
+
+        function selectNode(id) {
+            if (selected?.kind === 'node' && selected.id === id) return;
+            deselect();
+            selected = { kind: 'node', id };
+            const n = findNode(id), el = document.getElementById(id);
+            el.classList.add('selected');
+            attachHandles(id);
+            const bar = document.getElementById('barCat');
+            bar.style.display = n.type === 'image' ? 'none' : '';
+            if (n.type !== 'image') {
+                bar.innerHTML = document.getElementById('catSelect').innerHTML;
+                [...bar.options].forEach(o => o.selected = o.value === n.cat);
+            }
+            nodeBar.style.display = 'flex';
+            positionBars();
+        }
+
+        function attachHandles(id) {
+            const el = document.getElementById(id);
+            el.querySelectorAll('.handle').forEach(h => h.remove());
+            ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].forEach(dir => {
+                const h = document.createElement('div');
+                h.className = `handle h-${dir}`;
+                h.addEventListener('pointerdown', e => startResize(e, id, dir));
+                el.appendChild(h);
+            });
+        }
+
+        function startResize(e, id, dir) {
+            e.stopPropagation(); e.preventDefault();
+            const n = findNode(id), el = document.getElementById(id);
+            const sx = e.clientX, sy = e.clientY;
+            const o = { x: n.x, y: n.y, w: n.w || el.offsetWidth, h: n.h || el.offsetHeight };
+            el.setPointerCapture(e.pointerId);
+            const mm = me => {
+                const dx = (me.clientX - sx) / scale, dy = (me.clientY - sy) / scale;
+                let { x, y, w, h } = o;
+                if (dir.includes('e')) w = o.w + dx;
+                if (dir.includes('w')) { w = o.w - dx; x = o.x + dx; }
+                if (dir.includes('s')) h = o.h + dy;
+                if (dir.includes('n')) { h = o.h - dy; y = o.y + dy; }
+                n.w = Math.max(50, w); n.h = Math.max(36, h);
+                if (dir.includes('w') && w > 50) n.x = x;
+                if (dir.includes('n') && h > 36) n.y = y;
+                syncNodeEl(n); redrawConnsFor(id); positionBars();
+            };
+            const mu = () => {
+                el.removeEventListener('pointermove', mm); el.removeEventListener('pointerup', mu);
+                pushHistory('resize', { id, from: o, to: { x: n.x, y: n.y, w: n.w, h: n.h } });
+            };
+            el.addEventListener('pointermove', mm); el.addEventListener('pointerup', mu);
+        }
+
+        // ===== インライン編集 =====
+        function startEditSelected() { if (selected?.kind === 'node') startEdit(selected.id); }
+        function startEdit(id) {
+            const n = findNode(id); if (!n || n.type === 'image') return;
+            selectNode(id);
+            const el = document.getElementById(id);
+            el.classList.add('editing');
+            const target = el.querySelector('.node-text');
+            const old = n.text;
+            target.innerText = n.text;
+            target.contentEditable = 'true';
+            target.focus();
+            document.getSelection().selectAllChildren(target);
+            const commit = () => {
+                target.contentEditable = 'false';
+                el.classList.remove('editing');
+                const nv = target.innerText.trim();
+                if (nv && nv !== old) { n.text = nv; pushHistory('edit', { id, from: old, to: nv }); }
+                refreshNodeContent(n); redrawConnsFor(id);
+            };
+            target.addEventListener('blur', commit, { once: true });
+            target.addEventListener('keydown', ke => {
+                if (ke.key === 'Enter' && !ke.shiftKey) { ke.preventDefault(); target.blur(); }
+                if (ke.key === 'Escape') { target.innerText = old; target.blur(); }
+                ke.stopPropagation();
+            });
+        }
+
+        // ===== 複製・カテゴリ変更・削除 =====
+        function duplicateSelected() {
+            if (selected?.kind !== 'node') return;
+            const n = findNode(selected.id);
+            const c = { ...n, id: newId('n'), x: n.x + 24, y: n.y + 24 };
+            addNode(c); selectNode(c.id);
+        }
+        function changeCategory(sel) {
+            if (selected?.kind !== 'node') return;
+            const n = findNode(selected.id);
+            const opt = sel.options[sel.selectedIndex];
+            pushHistory('cat', { id: n.id, from: { cat: n.cat, customClass: n.customClass }, to: { cat: opt.value, customClass: opt.dataset.class } });
+            n.cat = opt.value; n.customClass = opt.dataset.class;
+            refreshNodeContent(n);
+        }
+        function deleteSelected() {
+            if (!selected) return;
+            if (selected.kind === 'node') deleteNode(selected.id);
+            else if (selected.kind === 'conn') deleteConn(selected.id);
+            else if (selected.kind === 'shape') deleteShape(selected.id);
+        }
+        function deleteNode(id, record = true) {
+            const n = findNode(id); if (!n) return;
+            const related = connections.filter(c => c.sid === id || c.eid === id);
+            if (record) pushHistory('delNode', { node: n, conns: related });
+            related.forEach(c => removeConnSilent(c.id));
+            removeNodeSilent(id);
+            deselect();
+        }
+        function removeNodeSilent(id) { document.getElementById(id)?.remove(); nodes = nodes.filter(n => n.id !== id); }
+
+        // ===== 接続（ポートドラッグ） =====
+        function startConnect(e, sid) {
+            e.stopPropagation(); e.preventDefault();
+            document.body.classList.add('connecting');
+            const temp = document.getElementById('tempConnect');
+            const src = findNode(sid);
+            const mm = me => {
+                const [wx, wy] = toWorld(me.clientX, me.clientY);
+                const a = nodeCenter(src);
+                temp.style.display = '';
+                temp.setAttribute('d', `M ${a[0] + O} ${a[1] + O} L ${wx + O} ${wy + O}`);
+            };
+            const mu = me => {
+                document.removeEventListener('pointermove', mm); document.removeEventListener('pointerup', mu);
+                document.body.classList.remove('connecting');
+                temp.style.display = 'none';
+                const hit = document.elementFromPoint(me.clientX, me.clientY)?.closest('.node');
+                if (hit && hit.id !== sid && !connections.some(c => c.sid === sid && c.eid === hit.id)) {
+                    const conn = { id: newId('c'), sid, eid: hit.id, style: 'arrow' };
+                    connections.push(conn); renderConn(conn);
+                    pushHistory('addConn', { conn });
+                }
+            };
+            document.addEventListener('pointermove', mm); document.addEventListener('pointerup', mu);
+        }
+
+        function nodeRect(n) {
+            const el = document.getElementById(n.id);
+            return { x: n.x, y: n.y, w: n.w || el.offsetWidth, h: n.h || el.offsetHeight };
+        }
+        function nodeCenter(n) { const r = nodeRect(n); return [r.x + r.w / 2, r.y + r.h / 2]; }
+
+        function connPath(c) {
+            const a = findNode(c.sid), b = findNode(c.eid);
+            if (!a || !b) return '';
+            const ra = nodeRect(a), rb = nodeRect(b);
+            const ca = [ra.x + ra.w / 2, ra.y + ra.h / 2], cb = [rb.x + rb.w / 2, rb.y + rb.h / 2];
+            const dx = cb[0] - ca[0], dy = cb[1] - ca[1];
+            let p1, p2, c1, c2;
+            const bend = Math.min(90, Math.max(35, Math.hypot(dx, dy) / 3));
+            if (Math.abs(dx) > Math.abs(dy)) {
+                p1 = [dx > 0 ? ra.x + ra.w : ra.x, ca[1]];
+                p2 = [dx > 0 ? rb.x : rb.x + rb.w, cb[1]];
+                c1 = [p1[0] + Math.sign(dx) * bend, p1[1]];
+                c2 = [p2[0] - Math.sign(dx) * bend, p2[1]];
+            } else {
+                p1 = [ca[0], dy > 0 ? ra.y + ra.h : ra.y];
+                p2 = [cb[0], dy > 0 ? rb.y : rb.y + rb.h];
+                c1 = [p1[0], p1[1] + Math.sign(dy) * bend];
+                c2 = [p2[0], p2[1] - Math.sign(dy) * bend];
+            }
+            return `M ${p1[0]+O} ${p1[1]+O} C ${c1[0]+O} ${c1[1]+O}, ${c2[0]+O} ${c2[1]+O}, ${p2[0]+O} ${p2[1]+O}`;
+        }
+
+        function applyConnMarkers(c) {
+            const g = connLayer.querySelector(`[data-id="${c.id}"]`); if (!g) return;
+            const vis = g.querySelector('.conn-visible');
+            const isSel = selected?.kind === 'conn' && selected.id === c.id;
+            const m = isSel ? 'url(#arrowSel)' : 'url(#arrow)';
+            const st = c.style || 'arrow';
+            if (st === 'none') { vis.removeAttribute('marker-end'); vis.removeAttribute('marker-start'); }
+            else if (st === 'both') { vis.setAttribute('marker-end', m); vis.setAttribute('marker-start', m); }
+            else { vis.setAttribute('marker-end', m); vis.removeAttribute('marker-start'); }
+        }
+
+        function renderConn(c) {
+            let g = connLayer.querySelector(`[data-id="${c.id}"]`);
+            if (!g) {
+                g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.dataset.id = c.id;
+                g.innerHTML = `<path class="hit-line"/><path class="conn-visible"/>`;
+                g.querySelector('.hit-line').addEventListener('pointerdown', e => { e.stopPropagation(); selectLine('conn', c.id, e); });
+                connLayer.appendChild(g);
+            }
+            const d = connPath(c);
+            g.querySelectorAll('path').forEach(p => p.setAttribute('d', d));
+            applyConnMarkers(c);
+        }
+        function redrawConnsFor(id) { connections.filter(c => c.sid === id || c.eid === id).forEach(renderConn); }
+        function redrawAllConns() { connections.forEach(renderConn); }
+        function deleteConn(id, record = true) {
+            const c = connections.find(x => x.id === id); if (!c) return;
+            if (record) pushHistory('delConn', { conn: c });
+            removeConnSilent(id); deselect();
+        }
+        function removeConnSilent(id) { connLayer.querySelector(`[data-id="${id}"]`)?.remove(); connections = connections.filter(c => c.id !== id); }
+
+        function setConnStyle(style) {
+            if (selected?.kind !== 'conn') return;
+            const c = connections.find(x => x.id === selected.id); if (!c) return;
+            if ((c.style || 'arrow') !== style) {
+                pushHistory('connStyle', { id: c.id, from: c.style || 'arrow', to: style });
+                c.style = style;
+                applyConnMarkers(c);
+            }
+            updateStyleButtons(c);
+        }
+        function updateStyleButtons(c) {
+            const st = c?.style || 'arrow';
+            ['arrow', 'none', 'both'].forEach(s => document.getElementById('ls-' + s).classList.toggle('style-on', st === s));
+        }
+
+        // ===== 図形（フリーハンド・直線・囲み矩形） =====
+        function renderShape(s) {
+            let g = shapeLayer.querySelector(`[data-id="${s.id}"]`);
+            if (!g) {
+                g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.dataset.id = s.id;
+                if (s.kind === 'rect') g.innerHTML = `<rect class="hit-line"/><rect class="rect-visible" rx="14"/>`;
+                else g.innerHTML = `<polyline class="hit-line"/><polyline class="stroke-visible"/>`;
+                g.querySelector('.hit-line').addEventListener('pointerdown', e => { e.stopPropagation(); selectLine('shape', s.id, e); });
+                shapeLayer.appendChild(g);
+            }
+            if (s.kind === 'rect') {
+                g.querySelectorAll('rect').forEach(r => {
+                    r.setAttribute('x', s.x + O); r.setAttribute('y', s.y + O);
+                    r.setAttribute('width', Math.max(1, s.w)); r.setAttribute('height', Math.max(1, s.h));
+                });
+            } else {
+                const pts = (s.kind === 'line' ? [[s.x1, s.y1], [s.x2, s.y2]] : s.points)
+                    .map(p => `${p[0] + O},${p[1] + O}`).join(' ');
+                g.querySelectorAll('polyline').forEach(p => p.setAttribute('points', pts));
+            }
+        }
+        function deleteShape(id, record = true) {
+            const s = shapes.find(x => x.id === id); if (!s) return;
+            if (record) pushHistory('delShape', { shape: s });
+            removeShapeSilent(id); deselect();
+        }
+        function removeShapeSilent(id) { shapeLayer.querySelector(`[data-id="${id}"]`)?.remove(); shapes = shapes.filter(s => s.id !== id); }
+
+        // ===== 線・図形の選択 =====
+        function selectLine(kind, id, e) {
+            deselect();
+            selected = { kind, id };
+            const layer = kind === 'conn' ? connLayer : shapeLayer;
+            layer.querySelector(`[data-id="${id}"]`)?.classList.add('line-sel');
+            // 接続なら矢印スタイルボタンを表示
+            const isConn = kind === 'conn';
+            ['ls-arrow', 'ls-none', 'ls-both', 'ls-sep'].forEach(bid => document.getElementById(bid).style.display = isConn ? '' : 'none');
+            if (isConn) {
+                const c = connections.find(x => x.id === id);
+                applyConnMarkers(c);
+                updateStyleButtons(c);
+            }
+            const r = container.getBoundingClientRect();
+            lineBar.style.display = 'flex';
+            lineBar.style.left = Math.max(4, e.clientX - r.left - lineBar.offsetWidth / 2) + 'px';
+            lineBar.style.top = Math.max(4, e.clientY - r.top - 52) + 'px';
+        }
+
+        function deselect() {
+            if (selected?.kind === 'node') {
+                const el = document.getElementById(selected.id);
+                if (el) { el.classList.remove('selected'); el.querySelectorAll('.handle').forEach(h => h.remove()); }
+            } else if (selected?.kind === 'conn') {
+                const c = connections.find(x => x.id === selected.id);
+                document.querySelectorAll('g.line-sel').forEach(g => g.classList.remove('line-sel'));
+                selected = null;
+                if (c) applyConnMarkers(c);
+            } else if (selected) {
+                document.querySelectorAll('g.line-sel').forEach(g => g.classList.remove('line-sel'));
+            }
+            selected = null;
+            nodeBar.style.display = 'none';
+            lineBar.style.display = 'none';
+        }
+
+        function positionBars() {
+            if (selected?.kind !== 'node') return;
+            const n = findNode(selected.id); if (!n) return;
+            const r = nodeRect(n);
+            const [sx, sy] = toScreen(r.x + r.w / 2, r.y);
+            nodeBar.style.left = (sx - nodeBar.offsetWidth / 2) + 'px';
+            nodeBar.style.top = Math.max(4, sy - 48) + 'px';
+        }
+
+        // ===== キャンバス：パン／描画／ズーム =====
+        container.addEventListener('pointerdown', e => {
+            if (e.target.closest('.node') || e.target.closest('.float-bar') || e.target.closest('.hit-line')) return;
+            deselect();
+            const start = toWorld(e.clientX, e.clientY);
+
+            if (drawTool === 'pen') {
+                const s = { id: newId('s'), kind: 'free', points: [start] };
+                const mm = me => { s.points.push(toWorld(me.clientX, me.clientY)); renderShape(s); };
+                const mu = () => {
+                    cleanup(mm, mu);
+                    if (s.points.length > 1) { shapes.push(s); pushHistory('addShape', { shape: s }); }
+                    else shapeLayer.querySelector(`[data-id="${s.id}"]`)?.remove();
+                };
+                listen(mm, mu);
+            } else if (drawTool === 'line') {
+                const s = { id: newId('s'), kind: 'line', x1: start[0], y1: start[1], x2: start[0], y2: start[1] };
+                const mm = me => { const [wx, wy] = toWorld(me.clientX, me.clientY); s.x2 = wx; s.y2 = wy; renderShape(s); };
+                const mu = () => {
+                    cleanup(mm, mu);
+                    if (Math.hypot(s.x2 - s.x1, s.y2 - s.y1) > 5) { shapes.push(s); pushHistory('addShape', { shape: s }); }
+                    else shapeLayer.querySelector(`[data-id="${s.id}"]`)?.remove();
+                };
+                listen(mm, mu);
+            } else if (drawTool === 'rect') {
+                const s = { id: newId('s'), kind: 'rect', x: start[0], y: start[1], w: 0, h: 0 };
+                const mm = me => {
+                    const [wx, wy] = toWorld(me.clientX, me.clientY);
+                    s.x = Math.min(start[0], wx); s.y = Math.min(start[1], wy);
+                    s.w = Math.abs(wx - start[0]); s.h = Math.abs(wy - start[1]);
+                    renderShape(s);
+                };
+                const mu = () => {
+                    cleanup(mm, mu);
+                    if (s.w > 10 && s.h > 10) { shapes.push(s); pushHistory('addShape', { shape: s }); }
+                    else shapeLayer.querySelector(`[data-id="${s.id}"]`)?.remove();
+                };
+                listen(mm, mu);
+            } else {
+                const sx = e.clientX, sy = e.clientY, ox = panX, oy = panY;
+                const mm = me => { panX = ox + (me.clientX - sx); panY = oy + (me.clientY - sy); updateTransform(); };
+                const mu = () => cleanup(mm, mu);
+                listen(mm, mu);
+            }
+            function listen(mm, mu) { document.addEventListener('pointermove', mm); document.addEventListener('pointerup', mu); }
+            function cleanup(mm, mu) { document.removeEventListener('pointermove', mm); document.removeEventListener('pointerup', mu); }
+        });
+
+        container.addEventListener('wheel', e => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const ns = Math.min(Math.max(scale * delta, 0.2), 4);
+            const r = container.getBoundingClientRect();
+            panX = (e.clientX - r.left) - ((e.clientX - r.left) - panX) * (ns / scale);
+            panY = (e.clientY - r.top) - ((e.clientY - r.top) - panY) * (ns / scale);
+            scale = ns; updateTransform();
+        }, { passive: false });
+
+        function setDrawTool(t) {
+            drawTool = drawTool === t ? null : t;
+            ['pen', 'line', 'rect'].forEach(k => {
+                const b = document.getElementById('btn-' + k);
+                b.className = `px-3 py-1.5 rounded-lg text-xs font-bold transition ${drawTool === k ? 'bg-indigo-600 text-white shadow' : 'text-slate-400'}`;
+            });
+            container.classList.toggle('mode-draw', drawTool !== null);
+        }
+
+        // ===== その他UI =====
+        function setDisplayMode(m) {
+            nodeDisplayMode = m;
+            const on = 'p-2 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
+            const off = 'p-2 text-xs font-bold rounded-lg border-2 border-slate-100 bg-white text-slate-400';
+            document.getElementById('modeBox').className = m === 'box' ? on : off;
+            document.getElementById('modeText').className = m === 'text' ? on : off;
+        }
+        function handleImageUpload(e) {
+            const f = e.target.files[0]; if (!f) return;
+            const rd = new FileReader();
+            rd.onload = ev => {
+                const [cx, cy] = centerWorld();
+                addNode({ id: newId('n'), type: 'image', src: ev.target.result, x: cx - 100, y: cy - 75, w: 200, h: null, cat: '画像', text: '' });
+            };
+            rd.readAsDataURL(f);
+            e.target.value = '';
+        }
+        function resetView() { panX = 0; panY = 0; scale = 1; updateTransform(); }
+        function clearAll() {
+            if (!confirm('全て消去しますか？')) return;
+            nodes = []; connections = []; shapes = []; history = []; deselect();
+            nodeLayer.innerHTML = ''; connLayer.innerHTML = ''; shapeLayer.innerHTML = '';
+        }
+
+        // ===== キーボード =====
+        window.addEventListener('keydown', e => {
+            const t = document.activeElement;
+            if (t && (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.tagName === 'SELECT')) {
+                if (e.ctrlKey && e.key === 'Enter' && t.id === 'nodeInput') createFromSidebar();
+                return;
+            }
+            if (e.key === 'Escape') { if (drawTool) setDrawTool(drawTool); deselect(); }
+            if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
+            if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+            if (e.ctrlKey && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
+        });
+
+        // ===== AI連携出力 =====
+        function buildExportText() {
+            const now = new Date().toLocaleString('ja-JP');
+            const label = n => n.type === 'image' ? '（画像）' : `「${n.text.replace(/\n/g, ' / ')}」`;
+            let out = `【ThinkFlow 思考マップ 言語化データ】\n作成日時: ${now}\n\n`;
+
+            // カテゴリ別要素一覧
+            out += `■ 要素一覧（全${nodes.length}件）\n`;
+            const byCat = {};
+            nodes.forEach(n => { (byCat[n.cat || 'その他'] ||= []).push(n); });
+            Object.entries(byCat).forEach(([cat, list]) => {
+                out += `▼ ${cat}（${list.length}件）\n`;
+                list.forEach(n => out += `  - ${label(n)}\n`);
+            });
+
+            // 関係性（矢印スタイル別）
+            const styleSym = { arrow: '→', none: '—', both: '⇔' };
+            const styleNote = { arrow: '一方向（因果・流れ）', none: '無方向（関連）', both: '双方向（相互作用）' };
+            out += `\n■ 関係性（全${connections.length}本 ／ → 一方向, — 関連, ⇔ 相互）\n`;
+            if (connections.length === 0) out += `  （接続なし）\n`;
+            connections.forEach((c, i) => {
+                const a = findNode(c.sid), b = findNode(c.eid);
+                const st = c.style || 'arrow';
+                if (a && b) out += `  ${i + 1}. [${a.cat}] ${label(a)} ${styleSym[st]} [${b.cat}] ${label(b)} （${styleNote[st]}）\n`;
+            });
+
+            // 囲みグループ（矩形内に中心がある要素）
+            const rects = shapes.filter(s => s.kind === 'rect');
+            if (rects.length) {
+                out += `\n■ 囲みグループ（点線の矩形による分類）\n`;
+                rects.forEach((r, i) => {
+                    const members = nodes.filter(n => {
+                        const [cx, cy] = nodeCenter(n);
+                        return cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h;
+                    });
+                    out += `  グループ${i + 1}: `;
+                    out += members.length ? members.map(n => `[${n.cat}] ${label(n)}`).join('、') + '\n' : '（要素なし）\n';
+                });
+            }
+
+            // 接続構造の要約
+            const linked = new Set();
+            connections.forEach(c => { linked.add(c.sid); linked.add(c.eid); });
+            const hubs = nodes.map(n => ({ n, deg: connections.filter(c => c.sid === n.id || c.eid === n.id).length }))
+                              .filter(x => x.deg >= 3).sort((a, b) => b.deg - a.deg);
+            if (hubs.length) {
+                out += `\n■ 接続の多い中心的要素\n`;
+                hubs.forEach(h => out += `  - [${h.n.cat}] ${label(h.n)}（接続数: ${h.deg}）\n`);
+            }
+
+            // 孤立要素
+            const isolated = nodes.filter(n => !linked.has(n.id));
+            if (isolated.length) {
+                out += `\n■ 接続のない要素（未整理・保留の可能性）\n`;
+                isolated.forEach(n => out += `  - [${n.cat}] ${label(n)}\n`);
+            }
+
+            const frees = shapes.filter(s => s.kind !== 'rect').length;
+            if (frees) out += `\n■ 補足\n  フリーハンド・直線の描線 ${frees}本あり（強調などの視覚的注記）。詳細は添付スクリーンショットを参照。\n`;
+
+            out += `\n■ AIへの依頼テンプレート\n上記はマインドマップ的な思考整理ツールの構造データです。要素の分類、矢印の方向性（因果・関連・相互作用）、囲みグループを踏まえて、全体の論理構造を要約し、矛盾点や検討漏れがあれば指摘してください。\n`;
+            return out;
+        }
+
+        function openExport() {
+            document.getElementById('exportText').value = buildExportText();
+            document.getElementById('exportModal').style.display = 'flex';
+        }
+        function closeExport() { document.getElementById('exportModal').style.display = 'none'; }
+        function copyExport(btn) {
+            const ta = document.getElementById('exportText');
+            navigator.clipboard.writeText(ta.value).then(() => flashBtn(btn, 'コピーしました ✓'))
+                .catch(() => { ta.select(); document.execCommand('copy'); flashBtn(btn, 'コピーしました ✓'); });
+        }
+        function flashBtn(btn, msg) { const o = btn.textContent; btn.textContent = msg; setTimeout(() => btn.textContent = o, 1500); }
+        function savePng(btn) {
+            flashBtn(btn, '生成中...');
+            deselect();
+            closeExport();
+            setTimeout(() => {
+                html2canvas(container, { backgroundColor: '#ffffff', scale: 2 }).then(cv => {
+                    const a = document.createElement('a');
+                    a.download = `thinkflow_${Date.now()}.png`;
+                    a.href = cv.toDataURL('image/png');
+                    a.click();
+                    document.getElementById('exportModal').style.display = 'flex';
+                });
+            }, 100);
+        }
+
+        updateTransform();
+    </script>
+</body>
+</html>
