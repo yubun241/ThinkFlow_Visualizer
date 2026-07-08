@@ -59,10 +59,10 @@
         #svgLayer g { pointer-events: none; }
         #svgLayer .hit-line { pointer-events: stroke; }
         .conn-visible { stroke: #475569; stroke-width: 2; fill: none; pointer-events: none; }
-        .stroke-visible { stroke: #334155; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
-        .rect-visible { stroke: #334155; stroke-width: 2; fill: none; stroke-dasharray: 8 6; pointer-events: none; }
+        .stroke-visible { stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+        .rect-visible { stroke-width: 2; fill: none; pointer-events: none; }
         .hit-line { stroke: transparent; stroke-width: 16; fill: none; cursor: pointer; }
-        g.line-sel .conn-visible, g.line-sel .stroke-visible, g.line-sel .rect-visible { stroke: #6366f1; stroke-width: 3; }
+        g.line-sel .conn-visible, g.line-sel .stroke-visible, g.line-sel .rect-visible { stroke: #6366f1 !important; stroke-width: 3 !important; }
         .temp-connect { stroke: #10b981; stroke-width: 2; stroke-dasharray: 6 4; fill: none; }
 
         /* --- フローティングツールバー --- */
@@ -129,6 +129,9 @@
                 <button onclick="clearAll()" class="bg-red-50 text-red-500 hdr-btn">全消去</button>
                 <div class="w-px h-6 bg-slate-200 mx-1"></div>
                 <button onclick="savePng(this)" class="bg-slate-100 text-slate-700 hdr-btn hover:bg-slate-200">PNG出力</button>
+                <button onclick="saveData(this)" class="bg-slate-100 text-slate-700 hdr-btn hover:bg-slate-200">保存</button>
+                <button onclick="document.getElementById('loadInput').click()" class="bg-slate-100 text-slate-700 hdr-btn hover:bg-slate-200">読み込み</button>
+                <input type="file" id="loadInput" accept=".json,application/json" class="hidden" onchange="loadFile(event)">
                 <button onclick="openExport()" class="bg-indigo-600 text-white hdr-btn hover:bg-indigo-500 shadow-md">テキスト出力</button>
             </div>
         </header>
@@ -633,13 +636,12 @@
                     r.setAttribute('width', Math.max(1, s.w)); r.setAttribute('height', Math.max(1, s.h));
                 });
                 const vis = g.querySelector('.rect-visible');
-                if (s.dash === false) vis.setAttribute('stroke-dasharray', 'none');
-                else vis.setAttribute('stroke-dasharray', '8 6');
-                vis.setAttribute('stroke', s.color || '#334155');
+                vis.style.strokeDasharray = (s.dash === false) ? 'none' : '8 6';
+                vis.style.stroke = s.color || '#334155';
             } else {
                 const pts = (s.kind === 'line' ? [[s.x1, s.y1], [s.x2, s.y2]] : s.points).map(p => `${p[0] + O},${p[1] + O}`).join(' ');
                 g.querySelectorAll('polyline').forEach(p => p.setAttribute('points', pts));
-                g.querySelector('.stroke-visible').setAttribute('stroke', s.color || '#334155');
+                g.querySelector('.stroke-visible').style.stroke = s.color || '#334155';
             }
         }
         function deleteShape(id, record = true) {
@@ -795,10 +797,57 @@
             e.target.value = '';
         }
         function resetView() { panX = 0; panY = 0; scale = 1; updateTransform(); }
-        function clearAll() {
-            if (!confirm('全て消去しますか？')) return;
+        function resetBoardSilent() {
             nodes = []; connections = []; shapes = []; history = []; deselect();
             nodeLayer.innerHTML = ''; connLayer.innerHTML = ''; shapeLayer.innerHTML = '';
+        }
+        function clearAll() {
+            if (!confirm('全て消去しますか？')) return;
+            resetBoardSilent();
+        }
+
+        // ===== 保存・読み込み（JSONファイル） =====
+        function saveData(btn) {
+            const data = {
+                app: 'ThinkFlow', version: 9,
+                savedAt: new Date().toISOString(),
+                view: { panX, panY, scale },
+                nodes, connections, shapes
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            const d = new Date(), pad = v => String(v).padStart(2, '0');
+            a.download = `thinkflow_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+            a.href = URL.createObjectURL(blob);
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+            if (btn) flashBtn(btn, '保存しました');
+        }
+        function loadFile(e) {
+            const f = e.target.files[0];
+            e.target.value = '';
+            if (!f) return;
+            const rd = new FileReader();
+            rd.onload = ev => {
+                let data;
+                try { data = JSON.parse(ev.target.result); }
+                catch { alert('読み込み失敗: JSONとして解析できません。'); return; }
+                if (!data || data.app !== 'ThinkFlow' || !Array.isArray(data.nodes)) {
+                    alert('読み込み失敗: ThinkFlowの保存データではありません。'); return;
+                }
+                if (nodes.length && !confirm('現在の内容を破棄して読み込みますか？')) return;
+                resetBoardSilent();
+                nodes = data.nodes || [];
+                connections = data.connections || [];
+                shapes = data.shapes || [];
+                nodes.forEach(renderNode);
+                connections.forEach(renderConn);
+                shapes.forEach(renderShape);
+                if (data.view) { panX = data.view.panX || 0; panY = data.view.panY || 0; scale = data.view.scale || 1; }
+                updateTransform();
+                redrawAllConns();
+            };
+            rd.readAsText(f);
         }
 
         // ===== キーボード =====
