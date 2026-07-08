@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ThinkFlow Pro v9 | 藤井工藝</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { background-color: #f1f5f9; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
         .canvas-container {
@@ -128,7 +127,6 @@
                 <button onclick="resetView()" class="bg-slate-100 hdr-btn">視点リセット</button>
                 <button onclick="clearAll()" class="bg-red-50 text-red-500 hdr-btn">全消去</button>
                 <div class="w-px h-6 bg-slate-200 mx-1"></div>
-                <button onclick="savePng(this)" class="bg-slate-100 text-slate-700 hdr-btn hover:bg-slate-200">PNG出力</button>
                 <button onclick="saveData(this)" class="bg-slate-100 text-slate-700 hdr-btn hover:bg-slate-200">保存</button>
                 <button onclick="document.getElementById('loadInput').click()" class="bg-slate-100 text-slate-700 hdr-btn hover:bg-slate-200">読み込み</button>
                 <input type="file" id="loadInput" accept=".json,application/json" class="hidden" onchange="loadFile(event)">
@@ -563,19 +561,6 @@
             return `M ${p1[0]+O} ${p1[1]+O} C ${c1[0]+O} ${c1[1]+O}, ${c2[0]+O} ${c2[1]+O}, ${p2[0]+O} ${p2[1]+O}`;
         }
         // 矢印の三角形（キャプチャ用実体）: tip=端点, from=制御点方向
-        function arrowTriangle(tip, from, color) {
-            const ang = Math.atan2(tip[1] - from[1], tip[0] - from[0]);
-            const L = 11, W = 5;
-            const bx = tip[0] - L * Math.cos(ang), by = tip[1] - L * Math.sin(ang);
-            const nx = -Math.sin(ang), ny = Math.cos(ang);
-            const pA = [bx + W * nx, by + W * ny], pB = [bx - W * nx, by - W * ny];
-            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            poly.setAttribute('points', `${tip[0]},${tip[1]} ${pA[0]},${pA[1]} ${pB[0]},${pB[1]}`);
-            poly.setAttribute('fill', color);
-            poly.setAttribute('class', 'capture-arrow');
-            return poly;
-        }
-
         function applyConnMarkers(c) {
             const g = connLayer.querySelector(`[data-id="${c.id}"]`); if (!g) return;
             const vis = g.querySelector('.conn-visible');
@@ -929,46 +914,6 @@
         }
         function flashBtn(btn, msg) { const o = btn.textContent; btn.textContent = msg; setTimeout(() => btn.textContent = o, 1500); }
 
-        // ===== 画像出力（フィールドのみ） =====
-        function injectCaptureArrows() {
-            connections.forEach(c => {
-                const g = connLayer.querySelector(`[data-id="${c.id}"]`); if (!g) return;
-                const st = c.style || 'arrow';
-                if (st === 'none') return;
-                const geom = connGeom(c); if (!geom) return;
-                const col = '#475569';
-                if (st === 'arrow' || st === 'both') g.appendChild(arrowTriangle([geom.p2[0]+O, geom.p2[1]+O], [geom.c2[0]+O, geom.c2[1]+O], col));
-                if (st === 'both') g.appendChild(arrowTriangle([geom.p1[0]+O, geom.p1[1]+O], [geom.c1[0]+O, geom.c1[1]+O], col));
-            });
-        }
-        function removeCaptureArrows() { document.querySelectorAll('.capture-arrow').forEach(el => el.remove()); }
-        function captureField() {
-            deselect();
-            injectCaptureArrows();
-            // marker非依存にするため、キャプチャ中はSVGマーカーを消す
-            connLayer.querySelectorAll('.conn-visible').forEach(p => { p.dataset.me = p.getAttribute('marker-end') || ''; p.dataset.ms = p.getAttribute('marker-start') || ''; p.removeAttribute('marker-end'); p.removeAttribute('marker-start'); });
-            return html2canvas(container, {
-                backgroundColor: '#ffffff',
-                scale: 2,
-                useCORS: true,
-                logging: false,
-                width: container.clientWidth,
-                height: container.clientHeight
-            }).then(cv => {
-                removeCaptureArrows();
-                connLayer.querySelectorAll('.conn-visible').forEach(p => { if (p.dataset.me) p.setAttribute('marker-end', p.dataset.me); if (p.dataset.ms) p.setAttribute('marker-start', p.dataset.ms); });
-                connections.forEach(renderConn);
-                return cv;
-            }).catch(err => { removeCaptureArrows(); connections.forEach(renderConn); throw err; });
-        }
-        function savePng(btn) {
-            flashBtn(btn, '生成中...');
-            setTimeout(() => captureField().then(cv => {
-                const a = document.createElement('a');
-                a.download = `thinkflow_${Date.now()}.png`;
-                a.href = cv.toDataURL('image/png'); a.click();
-            }), 60);
-        }
         updateTransform();
     </script>
 </body>
